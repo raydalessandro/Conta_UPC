@@ -1,0 +1,417 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="theme-color" content="#0d0d14">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
+    <title>Saldi Scanner</title>
+    <link rel="manifest" href="manifest.json">
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+        :root {
+            --bg-primary: #0d0d14;
+            --bg-secondary: #16161f;
+            --bg-tertiary: #1e1e2a;
+            --text-primary: #f4f4f8;
+            --text-secondary: #8888a0;
+            --text-muted: #55556a;
+            --accent-green: #00e676;
+            --accent-green-soft: rgba(0, 230, 118, 0.15);
+            --accent-red: #ff5252;
+            --accent-red-soft: rgba(255, 82, 82, 0.15);
+            --accent-yellow: #ffd740;
+            --accent-yellow-soft: rgba(255, 215, 64, 0.15);
+            --accent-blue: #448aff;
+            --border-medium: rgba(255, 255, 255, 0.1);
+            --border-subtle: rgba(255, 255, 255, 0.06);
+            --radius-md: 12px;
+            --radius-lg: 16px;
+        }
+        html, body { height: 100%; overflow: hidden; font-family: 'Inter', sans-serif; background: var(--bg-primary); color: var(--text-primary); }
+        #root { height: 100%; display: flex; flex-direction: column; }
+        .mono { font-family: 'JetBrains Mono', monospace; }
+        .flex { display: flex; } .flex-col { flex-direction: column; } .flex-1 { flex: 1; }
+        .items-center { align-items: center; } .justify-center { justify-content: center; } .justify-between { justify-content: space-between; }
+        .gap-2 { gap: 8px; } .gap-4 { gap: 16px; } .p-4 { padding: 16px; } .mb-4 { margin-bottom: 16px; }
+        .text-center { text-align: center; } .w-full { width: 100%; } .overflow-auto { overflow-y: auto; } .relative { position: relative; }
+        .btn { display: flex; align-items: center; justify-content: center; gap: 8px; padding: 14px 20px; border: none; border-radius: var(--radius-md); font-family: inherit; font-size: 15px; font-weight: 600; cursor: pointer; }
+        .btn:active { transform: scale(0.98); }
+        .btn-primary { background: linear-gradient(135deg, var(--accent-green), #00c853); color: var(--bg-primary); }
+        .btn-secondary { background: var(--bg-tertiary); color: var(--text-primary); border: 1px solid var(--border-medium); }
+        .btn-sm { padding: 10px 14px; font-size: 13px; }
+        .btn-lg { padding: 18px 24px; font-size: 17px; border-radius: var(--radius-lg); }
+        .card { background: var(--bg-secondary); border: 1px solid var(--border-subtle); border-radius: var(--radius-lg); padding: 20px; }
+        @keyframes pulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.02); } }
+        input[type="range"] { -webkit-appearance: none; background: rgba(255,255,255,0.2); border-radius: 10px; height: 8px; }
+        input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 28px; height: 28px; border-radius: 50%; background: white; cursor: pointer; }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="https://unpkg.com/@zxing/library@0.19.1/umd/index.min.js"></script>
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    
+    <script type="text/babel" data-presets="react">
+        const { useState, useEffect, useRef, useCallback, useMemo, createContext, useContext } = React;
+
+        // Storage
+        const Storage = {
+            get(k, d = null) { try { return JSON.parse(localStorage.getItem('saldi_' + k)) || d; } catch { return d; } },
+            set(k, v) { try { localStorage.setItem('saldi_' + k, JSON.stringify(v)); } catch {} }
+        };
+
+        // Context
+        const AppContext = createContext();
+        function useApp() { return useContext(AppContext); }
+
+        function AppProvider({ children }) {
+            const [view, setView] = useState('home');
+            const [saldiList, setSaldiList] = useState(() => Storage.get('saldiList', {}));
+            const [currentPanel, setCurrentPanel] = useState(() => Storage.get('currentPanel', 'Pannello 1'));
+            const [scans, setScans] = useState(() => Storage.get('scans', {}));
+
+            useEffect(() => { Storage.set('saldiList', saldiList); }, [saldiList]);
+            useEffect(() => { Storage.set('currentPanel', currentPanel); }, [currentPanel]);
+            useEffect(() => { Storage.set('scans', scans); }, [scans]);
+
+            const fileLoaded = Object.keys(saldiList).length > 0;
+
+            const loadExcel = useCallback((file) => {
+                return new Promise((resolve, reject) => {
+                    const reader = new FileReader();
+                    reader.onload = (evt) => {
+                        try {
+                            const data = new Uint8Array(evt.target.result);
+                            const wb = XLSX.read(data, { type: 'array' });
+                            const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1 });
+                            const list = {};
+                            rows.forEach((row, i) => {
+                                if (i === 0) return;
+                                let upc = String(row[0] || '').replace(/[^0-9]/g, '');
+                                const qty = parseInt(row[1]) || 1;
+                                if (upc.length >= 8) {
+                                    upc = upc.padStart(13, '0');
+                                    list[upc] = (list[upc] || 0) + qty;
+                                }
+                            });
+                            if (!Object.keys(list).length) return reject(new Error('Nessun UPC valido'));
+                            setSaldiList(list);
+                            resolve({ count: Object.keys(list).length });
+                        } catch (e) { reject(e); }
+                    };
+                    reader.readAsArrayBuffer(file);
+                });
+            }, []);
+
+            const handleScan = useCallback((rawUpc) => {
+                let upc = String(rawUpc).replace(/[^0-9]/g, '').padStart(13, '0');
+                const upcAlt = upc.startsWith('0') ? upc.substring(1) : upc;
+                const isSaldo = upc in saldiList || upcAlt in saldiList;
+                const matchedUpc = upc in saldiList ? upc : upcAlt;
+                const totalQty = saldiList[matchedUpc] || 0;
+                const panelScans = scans[currentPanel] || [];
+                const prevCount = panelScans.filter(s => s.upc === matchedUpc).length;
+                
+                setScans(prev => ({
+                    ...prev,
+                    [currentPanel]: [...(prev[currentPanel] || []), {
+                        upc: matchedUpc, timestamp: Date.now(), isSaldo, count: prevCount + 1, total: totalQty
+                    }]
+                }));
+                return { isSaldo, count: prevCount + 1, total: totalQty };
+            }, [saldiList, scans, currentPanel]);
+
+            const getStats = useCallback(() => {
+                const ps = scans[currentPanel] || [];
+                const saldi = ps.filter(s => s.isSaldo);
+                const unique = [...new Set(saldi.map(s => s.upc))];
+                let ecc = 0;
+                unique.forEach(u => { if (saldi.filter(s => s.upc === u).length > (saldiList[u] || 0)) ecc++; });
+                return { total: ps.length, saldiFound: saldi.length, notSaldi: ps.filter(s => !s.isSaldo).length, eccedenze: ecc };
+            }, [scans, currentPanel, saldiList]);
+
+            const clearAll = useCallback(() => { setSaldiList({}); setScans({}); }, []);
+
+            return <AppContext.Provider value={{ view, setView, saldiList, fileLoaded, currentPanel, scans, handleScan, getStats, loadExcel, clearAll }}>
+                {children}
+            </AppContext.Provider>;
+        }
+
+        // Scanner
+        function ScannerView() {
+            const { setView, currentPanel, getStats, handleScan, scans } = useApp();
+            const stats = getStats();
+            const lastScan = scans[currentPanel]?.slice(-1)[0];
+            
+            const videoRef = useRef(null);
+            const codeReaderRef = useRef(null);
+            const streamRef = useRef(null);
+            const lastScanRef = useRef({ code: '', time: 0 });
+            const animationRef = useRef(null);
+            
+            const [status, setStatus] = useState('initializing');
+            const [error, setError] = useState(null);
+            const [debug, setDebug] = useState('Avvio...');
+            const [torchOn, setTorchOn] = useState(false);
+            const [zoom, setZoom] = useState(1);
+            const [maxZoom, setMaxZoom] = useState(1);
+            const [caps, setCaps] = useState({});
+            const [manualUpc, setManualUpc] = useState('');
+            
+            const DEBOUNCE_MS = 1500;
+
+            useEffect(() => {
+                let mounted = true;
+                
+                const init = async () => {
+                    try {
+                        setDebug('Richiesta camera HD...');
+                        const stream = await navigator.mediaDevices.getUserMedia({
+                            video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1080 }, focusMode: { ideal: 'continuous' } },
+                            audio: false
+                        });
+                        
+                        if (!mounted) { stream.getTracks().forEach(t => t.stop()); return; }
+                        streamRef.current = stream;
+                        
+                        const track = stream.getVideoTracks()[0];
+                        const c = track.getCapabilities?.() || {};
+                        setCaps(c);
+                        
+                        if (c.zoom) {
+                            setMaxZoom(Math.min(c.zoom.max || 5, 8));
+                            const initZoom = Math.min(2.0, c.zoom.max || 2);
+                            setZoom(initZoom);
+                            try { await track.applyConstraints({ advanced: [{ zoom: initZoom }] }); } catch {}
+                        }
+
+                        if (videoRef.current) { videoRef.current.srcObject = stream; await videoRef.current.play(); }
+                        
+                        const s = track.getSettings();
+                        setDebug(`${s.width}x${s.height}`);
+                        setStatus('scanning');
+
+                        // Native BarcodeDetector
+                        if ('BarcodeDetector' in window) {
+                            try {
+                                const formats = await window.BarcodeDetector.getSupportedFormats();
+                                if (formats.includes('ean_13')) {
+                                    setDebug('Scanner Nativo ✓');
+                                    const detector = new window.BarcodeDetector({ formats: ['ean_13', 'ean_8', 'upc_a', 'upc_e'] });
+                                    
+                                    const loop = async () => {
+                                        if (!mounted || !videoRef.current) return;
+                                        try {
+                                            const bc = await detector.detect(videoRef.current);
+                                            if (bc.length > 0) {
+                                                const code = bc[0].rawValue;
+                                                const now = Date.now();
+                                                if (now - lastScanRef.current.time >= DEBOUNCE_MS) {
+                                                    lastScanRef.current = { code, time: now };
+                                                    if (navigator.vibrate) navigator.vibrate(100);
+                                                    const r = handleScan(code);
+                                                    setDebug(`✓ ${code} ${r.isSaldo ? 'SALDO' : 'NO'}`);
+                                                }
+                                            }
+                                        } catch {}
+                                        if (mounted) animationRef.current = requestAnimationFrame(loop);
+                                    };
+                                    loop();
+                                    return;
+                                }
+                            } catch {}
+                        }
+
+                        // ZXing fallback
+                        setDebug('Scanner ZXing ✓');
+                        const hints = new Map();
+                        hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [ZXing.BarcodeFormat.EAN_13, ZXing.BarcodeFormat.EAN_8, ZXing.BarcodeFormat.UPC_A, ZXing.BarcodeFormat.UPC_E]);
+                        hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
+                        codeReaderRef.current = new ZXing.BrowserMultiFormatReader(hints);
+                        codeReaderRef.current.timeBetweenScansMillis = 300;
+                        codeReaderRef.current.decodeFromStream(stream, videoRef.current, (result) => {
+                            if (result && mounted) {
+                                const code = result.getText();
+                                const now = Date.now();
+                                if (now - lastScanRef.current.time >= DEBOUNCE_MS || code !== lastScanRef.current.code) {
+                                    lastScanRef.current = { code, time: now };
+                                    if (navigator.vibrate) navigator.vibrate(100);
+                                    const r = handleScan(code);
+                                    setDebug(`✓ ${code} ${r.isSaldo ? 'SALDO' : 'NO'}`);
+                                }
+                            }
+                        });
+                    } catch (e) {
+                        if (mounted) { setStatus('error'); setError(e.message); }
+                    }
+                };
+
+                init();
+                return () => {
+                    mounted = false;
+                    if (animationRef.current) cancelAnimationFrame(animationRef.current);
+                    if (codeReaderRef.current) try { codeReaderRef.current.reset(); } catch {}
+                    if (streamRef.current) streamRef.current.getTracks().forEach(t => t.stop());
+                };
+            }, [handleScan]);
+
+            const handleZoom = async (e) => {
+                const z = parseFloat(e.target.value);
+                setZoom(z);
+                if (streamRef.current) {
+                    try { await streamRef.current.getVideoTracks()[0].applyConstraints({ advanced: [{ zoom: z }] }); } catch {}
+                }
+            };
+
+            const toggleTorch = async () => {
+                if (!streamRef.current || !caps.torch) return;
+                try {
+                    await streamRef.current.getVideoTracks()[0].applyConstraints({ advanced: [{ torch: !torchOn }] });
+                    setTorchOn(!torchOn);
+                } catch {}
+            };
+
+            const doManual = () => {
+                if (manualUpc.trim()) {
+                    const r = handleScan(manualUpc.trim());
+                    if (navigator.vibrate) navigator.vibrate(100);
+                    setDebug(`✓ ${manualUpc} ${r.isSaldo ? 'SALDO' : 'NO'}`);
+                    setManualUpc('');
+                }
+            };
+
+            return (
+                <div className="flex flex-col flex-1" style={{ background: '#000', height: '100%' }}>
+                    <div className="flex items-center justify-between" style={{ padding: '12px 16px', background: 'var(--bg-secondary)' }}>
+                        <button className="btn btn-sm btn-secondary" onClick={() => setView('home')}>← Esci</button>
+                        <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{currentPanel}</span>
+                        <div className="mono" style={{ fontSize: 14 }}>
+                            <span style={{ color: 'var(--accent-green)' }}>{stats.saldiFound}</span>
+                            <span style={{ color: 'var(--text-muted)' }}> / </span>
+                            <span style={{ color: 'var(--accent-red)' }}>{stats.notSaldi}</span>
+                        </div>
+                    </div>
+
+                    <div className="flex-1 relative" style={{ overflow: 'hidden' }}>
+                        <video ref={videoRef} style={{ width: '100%', height: '100%', objectFit: 'cover' }} playsInline autoPlay muted />
+                        
+                        {status === 'scanning' && (
+                            <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
+                                <div style={{ width: '85%', maxWidth: 350, height: 130, border: '3px solid rgba(0,230,118,0.8)', borderRadius: 16, boxShadow: '0 0 0 4000px rgba(0,0,0,0.5)', position: 'relative' }}>
+                                    <div style={{ position: 'absolute', top: '50%', left: 10, right: 10, height: 2, background: 'var(--accent-green)', opacity: 0.7 }} />
+                                </div>
+                                <div style={{ marginTop: 20, color: 'white', background: 'rgba(0,0,0,0.7)', padding: '8px 16px', borderRadius: 8, fontSize: 13, fontFamily: 'JetBrains Mono' }}>{debug}</div>
+                            </div>
+                        )}
+                        
+                        {status === 'scanning' && (
+                            <div style={{ position: 'absolute', bottom: 20, left: 20, right: 20, display: 'flex', gap: 12, alignItems: 'center', zIndex: 20 }}>
+                                {caps.zoom && maxZoom > 1 && (
+                                    <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 10 }}>
+                                        <span style={{ color: 'white', fontSize: 12 }}>🔍</span>
+                                        <input type="range" min="1" max={maxZoom} step="0.1" value={zoom} onChange={handleZoom} style={{ flex: 1 }} />
+                                        <span style={{ color: 'white', fontSize: 12, minWidth: 35 }}>{zoom.toFixed(1)}x</span>
+                                    </div>
+                                )}
+                                {caps.torch && (
+                                    <button onClick={toggleTorch} style={{ width: 50, height: 50, borderRadius: '50%', border: 'none', background: torchOn ? 'var(--accent-yellow)' : 'rgba(255,255,255,0.2)', color: torchOn ? '#000' : '#fff', fontSize: 20, cursor: 'pointer' }}>
+                                        {torchOn ? '🔦' : '💡'}
+                                    </button>
+                                )}
+                            </div>
+                        )}
+
+                        {status === 'initializing' && (
+                            <div className="flex flex-col items-center justify-center" style={{ position: 'absolute', inset: 0, background: 'var(--bg-primary)' }}>
+                                <div style={{ fontSize: 48, marginBottom: 16, animation: 'pulse 1.5s infinite' }}>📷</div>
+                                <p style={{ color: 'var(--text-secondary)' }}>Avvio camera...</p>
+                            </div>
+                        )}
+
+                        {status === 'error' && (
+                            <div className="flex flex-col items-center justify-center p-4" style={{ position: 'absolute', inset: 0, background: 'var(--bg-primary)', textAlign: 'center' }}>
+                                <div style={{ fontSize: 48, marginBottom: 16 }}>⚠️</div>
+                                <p style={{ color: 'var(--accent-red)', marginBottom: 16 }}>{error}</p>
+                                <button className="btn btn-primary" onClick={() => window.location.reload()}>🔄 Ricarica</button>
+                            </div>
+                        )}
+                    </div>
+
+                    <div style={{ padding: 12, background: 'var(--bg-secondary)', display: 'flex', gap: 8 }}>
+                        <input type="tel" placeholder="UPC manuale..." value={manualUpc} onChange={(e) => setManualUpc(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && doManual()} className="mono" style={{ flex: 1, padding: 14, borderRadius: 10, border: '1px solid var(--border-medium)', background: 'var(--bg-tertiary)', color: 'var(--text-primary)', fontSize: 16 }} />
+                        <button className="btn btn-primary" onClick={doManual} disabled={!manualUpc.trim()}>OK</button>
+                    </div>
+
+                    {lastScan && (
+                        <div style={{ padding: '12px 16px', background: lastScan.isSaldo ? 'var(--accent-green-soft)' : 'var(--accent-red-soft)', borderTop: `2px solid ${lastScan.isSaldo ? 'var(--accent-green)' : 'var(--accent-red)'}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <div>
+                                <span className="mono" style={{ fontWeight: 700, fontSize: 15 }}>{lastScan.upc}</span>
+                                <span style={{ marginLeft: 8, fontSize: 13, color: 'var(--text-secondary)' }}>{lastScan.isSaldo ? '✓ SALDO' : '✗ NO'}</span>
+                            </div>
+                            {lastScan.isSaldo && <span className="mono" style={{ padding: '6px 12px', background: lastScan.count > lastScan.total ? 'var(--accent-yellow)' : 'var(--accent-green)', color: '#000', borderRadius: 8, fontWeight: 700 }}>{lastScan.count}/{lastScan.total}</span>}
+                        </div>
+                    )}
+                </div>
+            );
+        }
+
+        // Home
+        function HomeView() {
+            const { setView, fileLoaded, saldiList, loadExcel, getStats, clearAll } = useApp();
+            const fileRef = useRef(null);
+            const stats = getStats();
+            const cnt = Object.keys(saldiList).length;
+
+            const onFile = async (e) => {
+                const f = e.target.files?.[0];
+                if (!f) return;
+                try { const r = await loadExcel(f); alert(`✓ Caricati ${r.count} UPC`); } 
+                catch (err) { alert('❌ ' + err.message); }
+                e.target.value = '';
+            };
+
+            return (
+                <div className="flex flex-col flex-1 overflow-auto" style={{ padding: 20 }}>
+                    <div className="text-center mb-4" style={{ padding: '20px 0' }}>
+                        <h1 style={{ fontSize: 32, fontWeight: 700, background: 'linear-gradient(135deg, var(--accent-green), var(--accent-blue))', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>SALDI SCANNER</h1>
+                        <p style={{ color: 'var(--text-muted)', marginTop: 4 }}>Scansiona • Verifica • Organizza</p>
+                    </div>
+
+                    <div className="card mb-4">
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 16, textAlign: 'center' }}>
+                            <div><div className="mono" style={{ fontSize: 28, fontWeight: 700, color: 'var(--accent-blue)' }}>{cnt}</div><div style={{ fontSize: 11, color: 'var(--text-muted)' }}>LISTA</div></div>
+                            <div><div className="mono" style={{ fontSize: 28, fontWeight: 700 }}>{stats.total}</div><div style={{ fontSize: 11, color: 'var(--text-muted)' }}>SCAN</div></div>
+                            <div><div className="mono" style={{ fontSize: 28, fontWeight: 700, color: 'var(--accent-green)' }}>{stats.saldiFound}</div><div style={{ fontSize: 11, color: 'var(--text-muted)' }}>TROVATI</div></div>
+                            <div><div className="mono" style={{ fontSize: 28, fontWeight: 700, color: 'var(--accent-red)' }}>{stats.notSaldi}</div><div style={{ fontSize: 11, color: 'var(--text-muted)' }}>NO SALDI</div></div>
+                        </div>
+                    </div>
+
+                    <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv" onChange={onFile} style={{ display: 'none' }} />
+                    <button className={`btn w-full mb-4 ${fileLoaded ? 'btn-secondary' : 'btn-primary'}`} onClick={() => fileRef.current?.click()}>
+                        📁 {fileLoaded ? 'Ricarica Excel' : 'Carica Lista Saldi'}
+                    </button>
+
+                    {fileLoaded && <button className="btn btn-primary btn-lg w-full mb-4" onClick={() => setView('scanner')}>📷 AVVIA SCANNER</button>}
+
+                    <div style={{ flex: 1 }} />
+                    <button className="btn btn-sm w-full" style={{ background: 'transparent', border: '1px solid var(--accent-red)', color: 'var(--accent-red)' }} onClick={() => confirm('Cancellare tutto?') && clearAll()}>🗑 Reset</button>
+                </div>
+            );
+        }
+
+        // App
+        function App() {
+            const { view } = useApp();
+            return <>{view === 'home' && <HomeView />}{view === 'scanner' && <ScannerView />}</>;
+        }
+
+        ReactDOM.createRoot(document.getElementById('root')).render(<AppProvider><App /></AppProvider>);
+    </script>
+</body>
+</html>
