@@ -759,8 +759,10 @@
         // HISTORY
         // ============================================================
         function HistoryView() {
-            const { setView, scans, currentPanel, saldiList } = useApp();
+            const { setView, scans, currentPanel, saldiList, storeArticles } = useApp();
             const panelScans = scans[currentPanel] || [];
+            const [mode, setMode] = useState('panel'); // 'panel' | 'total'
+            const [expanded, setExpanded] = useState({});
             
             const summary = useMemo(() => {
                 const grouped = {};
@@ -772,7 +774,54 @@
                 return Object.values(grouped).sort((a, b) => b.time - a.time);
             }, [panelScans, saldiList]);
 
-            return (
+            const totalsMap = useMemo(() => {
+                const agg = {};
+                Object.entries(scans).forEach(([panel, list]) => {
+                    (list || []).forEach(s => {
+                        if (!s.isSaldo) return;
+                        if (!(s.upc in saldiList)) return;
+                        if (!agg[s.upc]) agg[s.upc] = { scanned: 0, lastTime: 0, lastPanel: '', panelCounts: {} };
+                        agg[s.upc].scanned += 1;
+                        if (s.timestamp > agg[s.upc].lastTime) {
+                            agg[s.upc].lastTime = s.timestamp;
+                            agg[s.upc].lastPanel = panel;
+                        }
+                        agg[s.upc].panelCounts[panel] = (agg[s.upc].panelCounts[panel] || 0) + 1;
+                    });
+                });
+                return agg;
+            }, [scans, saldiList]);
+
+            const totalList = useMemo(() => {
+                const statusOrder = { missing: 0, over: 1, ok: 2 };
+                return (storeArticles || []).map(a => {
+                    const agg = totalsMap[a.upc] || { scanned: 0, lastTime: 0, lastPanel: '', panelCounts: {} };
+                    const expected = saldiList[a.upc] || 0;
+                    let status = 'missing';
+                    if (expected > 0 && agg.scanned === expected) status = 'ok';
+                    else if (expected > 0 && agg.scanned > expected) status = 'over';
+                    else status = 'missing';
+                    return {
+                        ...a,
+                        expected,
+                        scanned: agg.scanned,
+                        lastTime: agg.lastTime,
+                        lastPanel: agg.lastPanel,
+                        panelCounts: agg.panelCounts,
+                        status
+                    };
+                }).sort((a, b) => statusOrder[a.status] - statusOrder[b.status] || (b.lastTime || 0) - (a.lastTime || 0));
+            }, [storeArticles, totalsMap, saldiList]);
+
+            const statusStyles = {
+                ok: { bg: 'rgba(0,230,118,0.12)', border: 'var(--accent-green)', text: 'var(--accent-green)' },
+                over: { bg: 'rgba(255,215,64,0.12)', border: 'var(--accent-yellow)', text: 'var(--accent-yellow)' },
+                missing: { bg: 'rgba(255,82,82,0.12)', border: 'var(--accent-red)', text: 'var(--accent-red)' }
+            };
+
+            const toggleExpand = (upc) => setExpanded(prev => ({ ...prev, [upc]: !prev[upc] }));
+
+            const renderPanelHistory = () => (
                 <div className="flex flex-col flex-1">
                     <div className="flex items-center justify-between p-4" style={{ background: 'var(--bg-secondary)', borderBottom: '1px solid #222' }}>
                         <button className="btn btn-sm btn-secondary" onClick={() => setView('home')}>← Indietro</button>
@@ -804,6 +853,87 @@
                         ))}
                     </div>
                 </div>
+            );
+
+            const renderTotalHistory = () => (
+                <div className="flex flex-col flex-1">
+                    <div className="flex items-center justify-between p-4" style={{ background: 'var(--bg-secondary)', borderBottom: '1px solid #222' }}>
+                        <button className="btn btn-sm btn-secondary" onClick={() => setView('home')}>← Indietro</button>
+                        <span style={{ fontWeight: 600 }}>📜 Storico Totale</span>
+                        <div style={{ width: 80 }} />
+                    </div>
+
+                    <div className="flex-1 overflow-auto p-4">
+                        {(!storeArticles || storeArticles.length === 0) && (
+                            <div className="text-center" style={{ padding: 40, color: '#888' }}>Carica prima la lista corporate</div>
+                        )}
+                        {storeArticles && storeArticles.length > 0 && totalList.length === 0 && (
+                            <div className="text-center" style={{ padding: 40, color: '#888' }}>Nessuna scansione registrata</div>
+                        )}
+                        {totalList.map(item => {
+                            const style = statusStyles[item.status];
+                            const expandedRow = expanded[item.upc];
+                            return (
+                                <div key={item.upc} style={{
+                                    padding: 14,
+                                    background: style.bg,
+                                    borderRadius: 10,
+                                    marginBottom: 10,
+                                    border: `2px solid ${style.border}`
+                                }}>
+                                    <div className="flex items-center justify-between" style={{ gap: 8 }}>
+                                        <div style={{ flex: 1, minWidth: 0 }}>
+                                            <div style={{ fontWeight: 700 }}>{item.modello || 'Modello'} <span style={{ color: '#888', fontSize: 12 }}>×{item.scanned}/{item.expected}</span></div>
+                                            <div style={{ color: '#888', fontSize: 12 }}>{item.brand}</div>
+                                        </div>
+                                        <div className="mono" style={{
+                                            padding: '6px 10px',
+                                            borderRadius: 8,
+                                            background: '#000',
+                                            border: `1px solid ${style.border}`,
+                                            color: style.text,
+                                            fontWeight: 700
+                                        }}>
+                                            {item.scanned}/{item.expected}
+                                        </div>
+                                        <button className="btn btn-secondary btn-sm" style={{ whiteSpace: 'nowrap' }} onClick={() => window.open(`https://www.google.com/search?q=${encodeURIComponent(item.modello || item.upc)}`, '_blank')}>
+                                            🔍 Google
+                                        </button>
+                                        <button className="btn btn-secondary btn-sm" onClick={() => toggleExpand(item.upc)} style={{ whiteSpace: 'nowrap' }}>
+                                            {expandedRow ? '▲' : '▼'}
+                                        </button>
+                                    </div>
+                                    {expandedRow && (
+                                        <div style={{ marginTop: 10, background: 'rgba(0,0,0,0.25)', borderRadius: 8, padding: 10, fontSize: 13 }}>
+                                            <div className="mono" style={{ color: '#aaa' }}>{item.upc}</div>
+                                            <div style={{ color: '#ccc' }}>Sconto: -{item.sconto}%</div>
+                                            <div style={{ color: '#ccc' }}>Prezzi: {item.prezzoOrig ? `€${item.prezzoOrig}` : '-'} → {item.prezzoSaldo ? `€${item.prezzoSaldo}` : '-'}</div>
+                                            {item.lastTime ? (
+                                                <div style={{ color: '#888' }}>Ultima scansione: {new Date(item.lastTime).toLocaleString()} ({item.lastPanel || 'n/d'})</div>
+                                            ) : (
+                                                <div style={{ color: '#888' }}>Mai scansionato</div>
+                                            )}
+                                        </div>
+                                    )}
+                                </div>
+                            );
+                        })}
+                    </div>
+                </div>
+            );
+
+            return (
+                <>
+                    <div style={{ display: 'flex', gap: 8, padding: '10px 12px', background: 'var(--bg-secondary)', borderBottom: '1px solid #222' }}>
+                        <button className="btn btn-sm btn-secondary" style={{ flex: 1, border: mode === 'panel' ? '1px solid var(--accent-green)' : '1px solid #333', background: mode === 'panel' ? 'rgba(0,230,118,0.12)' : 'var(--bg-tertiary)' }} onClick={() => setMode('panel')}>
+                            📜 Pannello {currentPanel}
+                        </button>
+                        <button className="btn btn-sm btn-secondary" style={{ flex: 1, border: mode === 'total' ? '1px solid var(--accent-blue)' : '1px solid #333', background: mode === 'total' ? 'rgba(68,138,255,0.12)' : 'var(--bg-tertiary)' }} onClick={() => setMode('total')}>
+                            Σ Totale
+                        </button>
+                    </div>
+                    {mode === 'panel' ? renderPanelHistory() : renderTotalHistory()}
+                </>
             );
         }
 
