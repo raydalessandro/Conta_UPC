@@ -1,0 +1,2134 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="theme-color" content="#0d0d14">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="mobile-web-app-capable" content="yes">
+    <title>Saldi Scanner</title>
+    <link rel="manifest" href="manifest.json">
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📷</text></svg>">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        *, *::before, *::after {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        :root {
+            --bg-primary: #0d0d14;
+            --bg-secondary: #16161f;
+            --bg-tertiary: #1e1e2a;
+            --bg-elevated: #252532;
+            --text-primary: #f4f4f8;
+            --text-secondary: #8888a0;
+            --text-muted: #55556a;
+            --accent-green: #00e676;
+            --accent-green-soft: rgba(0, 230, 118, 0.15);
+            --accent-red: #ff5252;
+            --accent-red-soft: rgba(255, 82, 82, 0.15);
+            --accent-yellow: #ffd740;
+            --accent-yellow-soft: rgba(255, 215, 64, 0.15);
+            --accent-blue: #448aff;
+            --accent-blue-soft: rgba(68, 138, 255, 0.15);
+            --border-subtle: rgba(255, 255, 255, 0.06);
+            --border-medium: rgba(255, 255, 255, 0.1);
+            --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.3);
+            --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.4);
+            --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.5);
+            --radius-sm: 8px;
+            --radius-md: 12px;
+            --radius-lg: 16px;
+            --radius-xl: 20px;
+            --transition-fast: 150ms ease;
+            --transition-normal: 250ms ease;
+        }
+
+        html, body {
+            height: 100%;
+            overflow: hidden;
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            line-height: 1.5;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        #root {
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .mono {
+            font-family: 'JetBrains Mono', monospace;
+            letter-spacing: -0.02em;
+        }
+
+        /* Utility Classes */
+        .flex { display: flex; }
+        .flex-col { flex-direction: column; }
+        .flex-1 { flex: 1; }
+        .items-center { align-items: center; }
+        .justify-center { justify-content: center; }
+        .justify-between { justify-content: space-between; }
+        .gap-2 { gap: 8px; }
+        .gap-3 { gap: 12px; }
+        .gap-4 { gap: 16px; }
+        .p-4 { padding: 16px; }
+        .p-5 { padding: 20px; }
+        .text-center { text-align: center; }
+        .w-full { width: 100%; }
+        .overflow-auto { overflow-y: auto; }
+        .relative { position: relative; }
+
+        /* Button Base */
+        .btn {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            padding: 14px 20px;
+            border: none;
+            border-radius: var(--radius-md);
+            font-family: inherit;
+            font-size: 15px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all var(--transition-fast);
+            -webkit-user-select: none;
+            user-select: none;
+        }
+
+        .btn:active {
+            transform: scale(0.98);
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, var(--accent-green), #00c853);
+            color: var(--bg-primary);
+            box-shadow: 0 4px 20px rgba(0, 230, 118, 0.25);
+        }
+
+        .btn-primary:active {
+            box-shadow: 0 2px 10px rgba(0, 230, 118, 0.2);
+        }
+
+        .btn-secondary {
+            background: var(--bg-tertiary);
+            color: var(--text-primary);
+            border: 1px solid var(--border-medium);
+        }
+
+        .btn-ghost {
+            background: transparent;
+            color: var(--text-secondary);
+            border: 1px solid var(--border-medium);
+        }
+
+        .btn-danger {
+            background: transparent;
+            color: var(--accent-red);
+            border: 1px solid var(--accent-red);
+        }
+
+        .btn-lg {
+            padding: 18px 24px;
+            font-size: 17px;
+            border-radius: var(--radius-lg);
+        }
+
+        .btn-sm {
+            padding: 10px 14px;
+            font-size: 13px;
+        }
+
+        /* Card */
+        .card {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-subtle);
+            border-radius: var(--radius-lg);
+            padding: 20px;
+        }
+
+        /* Animations */
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
+        @keyframes slideUp {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.02); }
+        }
+
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            25% { transform: translateX(-5px); }
+            75% { transform: translateX(5px); }
+        }
+
+        .animate-fadeIn { animation: fadeIn 0.3s ease-out; }
+        .animate-slideUp { animation: slideUp 0.4s ease-out; }
+
+        @keyframes scanLine {
+            0%, 100% { 
+                opacity: 0.3;
+                transform: translateY(-20px);
+            }
+            50% { 
+                opacity: 1;
+                transform: translateY(20px);
+            }
+        }
+
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar {
+            width: 4px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: var(--border-medium);
+            border-radius: 2px;
+        }
+
+        /* Safe area for notched phones */
+        @supports (padding-top: env(safe-area-inset-top)) {
+            .safe-top { padding-top: env(safe-area-inset-top); }
+            .safe-bottom { padding-bottom: env(safe-area-inset-bottom); }
+        }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+    
+    <!-- External Libraries -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="https://unpkg.com/@zxing/library@0.19.1/umd/index.min.js"></script>
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    
+    <script type="text/babel" data-presets="react">
+        const { useState, useEffect, useRef, useCallback, createContext, useContext, useMemo } = React;
+
+        // ============================================================
+        // STORAGE SERVICE
+        // ============================================================
+        const StorageService = {
+            PREFIX: 'saldi_scanner_',
+            
+            get(key, defaultValue = null) {
+                try {
+                    const item = localStorage.getItem(this.PREFIX + key);
+                    return item ? JSON.parse(item) : defaultValue;
+                } catch (e) {
+                    console.warn('Storage read error:', e);
+                    return defaultValue;
+                }
+            },
+            
+            set(key, value) {
+                try {
+                    localStorage.setItem(this.PREFIX + key, JSON.stringify(value));
+                    return true;
+                } catch (e) {
+                    console.error('Storage write error:', e);
+                    return false;
+                }
+            },
+            
+            remove(key) {
+                try {
+                    localStorage.removeItem(this.PREFIX + key);
+                    return true;
+                } catch (e) {
+                    return false;
+                }
+            },
+            
+            clear() {
+                try {
+                    Object.keys(localStorage)
+                        .filter(k => k.startsWith(this.PREFIX))
+                        .forEach(k => localStorage.removeItem(k));
+                    return true;
+                } catch (e) {
+                    return false;
+                }
+            }
+        };
+
+        // ============================================================
+        // APP CONTEXT
+        // ============================================================
+        const AppContext = createContext(null);
+
+        function useApp() {
+            const context = useContext(AppContext);
+            if (!context) throw new Error('useApp must be used within AppProvider');
+            return context;
+        }
+
+        function AppProvider({ children }) {
+            // Core State
+            const [saldiList, setSaldiList] = useState(() => StorageService.get('saldiList', {}));
+            const [panels, setPanels] = useState(() => StorageService.get('panels', ['Pannello 1']));
+            const [currentPanel, setCurrentPanel] = useState(() => StorageService.get('currentPanel', 'Pannello 1'));
+            const [scans, setScans] = useState(() => StorageService.get('scans', {}));
+            const [view, setView] = useState('home');
+            const [feedback, setFeedback] = useState(null);
+
+            // Persist to storage
+            useEffect(() => { StorageService.set('saldiList', saldiList); }, [saldiList]);
+            useEffect(() => { StorageService.set('panels', panels); }, [panels]);
+            useEffect(() => { StorageService.set('currentPanel', currentPanel); }, [currentPanel]);
+            useEffect(() => { StorageService.set('scans', scans); }, [scans]);
+
+            // Computed values
+            const fileLoaded = Object.keys(saldiList).length > 0;
+            const saldiCount = Object.keys(saldiList).length;
+
+            const getStats = useCallback((panelName = currentPanel) => {
+                const panelScans = scans[panelName] || [];
+                const saldiFound = panelScans.filter(s => s.isSaldo);
+                const notSaldi = panelScans.filter(s => !s.isSaldo);
+                const uniqueUPCs = [...new Set(saldiFound.map(s => s.upc))];
+                
+                let eccedenze = 0;
+                uniqueUPCs.forEach(upc => {
+                    const count = saldiFound.filter(s => s.upc === upc).length;
+                    const expected = saldiList[upc] || 0;
+                    if (count > expected) eccedenze++;
+                });
+                
+                return {
+                    total: panelScans.length,
+                    saldiFound: saldiFound.length,
+                    notSaldi: notSaldi.length,
+                    uniqueSaldi: uniqueUPCs.length,
+                    eccedenze
+                };
+            }, [scans, currentPanel, saldiList]);
+
+            // Actions
+            const loadExcel = useCallback((file) => {
+                return new Promise((resolve, reject) => {
+                    const reader = new FileReader();
+                    
+                    reader.onload = (evt) => {
+                        try {
+                            const data = new Uint8Array(evt.target.result);
+                            const workbook = XLSX.read(data, { type: 'array' });
+                            const sheet = workbook.Sheets[workbook.SheetNames[0]];
+                            const rows = XLSX.utils.sheet_to_json(sheet, { header: 1 });
+                            
+                            const newList = {};
+                            let skipped = 0;
+                            
+                            rows.forEach((row, idx) => {
+                                if (idx === 0) return; // Skip header
+                                
+                                let upc = String(row[0] || '').trim();
+                                const qty = parseInt(row[1]) || 1;
+                                
+                                // Normalize UPC
+                                upc = upc.replace(/[^0-9]/g, '');
+                                
+                                if (upc.length >= 8 && upc.length <= 14) {
+                                    // Pad to 13 digits (EAN-13 standard)
+                                    upc = upc.padStart(13, '0');
+                                    newList[upc] = (newList[upc] || 0) + qty;
+                                } else if (upc.length > 0) {
+                                    skipped++;
+                                }
+                            });
+                            
+                            const count = Object.keys(newList).length;
+                            
+                            if (count === 0) {
+                                reject(new Error('Nessun codice UPC valido trovato nel file'));
+                                return;
+                            }
+                            
+                            setSaldiList(newList);
+                            resolve({ count, skipped });
+                        } catch (err) {
+                            reject(new Error('Errore lettura file: ' + err.message));
+                        }
+                    };
+                    
+                    reader.onerror = () => reject(new Error('Errore lettura file'));
+                    reader.readAsArrayBuffer(file);
+                });
+            }, []);
+
+            const handleScan = useCallback((rawUpc) => {
+                // Normalize scanned UPC
+                let upc = String(rawUpc).replace(/[^0-9]/g, '').padStart(13, '0');
+                
+                const isSaldo = upc in saldiList;
+                const totalQty = saldiList[upc] || 0;
+                
+                // Count previous scans for this UPC in current panel
+                const panelScans = scans[currentPanel] || [];
+                const previousCount = panelScans.filter(s => s.upc === upc).length;
+                
+                // Create scan record
+                const scanRecord = {
+                    upc,
+                    timestamp: Date.now(),
+                    isSaldo,
+                    count: previousCount + 1,
+                    total: totalQty
+                };
+                
+                // Update scans
+                setScans(prev => ({
+                    ...prev,
+                    [currentPanel]: [...(prev[currentPanel] || []), scanRecord]
+                }));
+                
+                // Determine feedback
+                let type, message;
+                if (!isSaldo) {
+                    type = 'error';
+                    message = 'NON IN SALDO';
+                } else if (previousCount >= totalQty) {
+                    type = 'warning';
+                    message = `ECCEDENZA ${previousCount + 1}/${totalQty}`;
+                } else {
+                    type = 'success';
+                    message = previousCount + 1 === totalQty 
+                        ? `COMPLETO ${previousCount + 1}/${totalQty}`
+                        : `TROVATO ${previousCount + 1}/${totalQty}`;
+                }
+                
+                // Trigger feedback
+                setFeedback({ type, message, upc });
+                
+                // Vibrate
+                if (navigator.vibrate) {
+                    const pattern = type === 'success' ? [80] : type === 'warning' ? [80, 50, 80] : [150];
+                    navigator.vibrate(pattern);
+                }
+                
+                // Clear feedback
+                setTimeout(() => setFeedback(null), 1800);
+                
+                return { type, message, upc };
+            }, [saldiList, scans, currentPanel]);
+
+            const addPanel = useCallback((name) => {
+                const trimmed = name.trim();
+                if (!trimmed) return { success: false, error: 'Nome vuoto' };
+                if (panels.includes(trimmed)) return { success: false, error: 'Nome già esistente' };
+                
+                setPanels(prev => [...prev, trimmed]);
+                setCurrentPanel(trimmed);
+                return { success: true };
+            }, [panels]);
+
+            const deletePanel = useCallback((name) => {
+                if (panels.length === 1) return { success: false, error: 'Almeno un pannello richiesto' };
+                
+                setPanels(prev => prev.filter(p => p !== name));
+                setScans(prev => {
+                    const newScans = { ...prev };
+                    delete newScans[name];
+                    return newScans;
+                });
+                
+                if (currentPanel === name) {
+                    setCurrentPanel(panels.find(p => p !== name));
+                }
+                
+                return { success: true };
+            }, [panels, currentPanel]);
+
+            const clearAll = useCallback(() => {
+                setSaldiList({});
+                setPanels(['Pannello 1']);
+                setCurrentPanel('Pannello 1');
+                setScans({});
+            }, []);
+
+            const value = {
+                // State
+                saldiList,
+                panels,
+                currentPanel,
+                scans,
+                view,
+                feedback,
+                fileLoaded,
+                saldiCount,
+                
+                // Setters
+                setView,
+                setCurrentPanel,
+                
+                // Actions
+                loadExcel,
+                handleScan,
+                addPanel,
+                deletePanel,
+                clearAll,
+                getStats
+            };
+
+            return (
+                <AppContext.Provider value={value}>
+                    {children}
+                </AppContext.Provider>
+            );
+        }
+
+        // ============================================================
+        // COMPONENTS: UI Elements
+        // ============================================================
+        
+        function StatCard({ label, value, color, icon }) {
+            return (
+                <div className="text-center">
+                    <div 
+                        className="mono"
+                        style={{ 
+                            fontSize: 28, 
+                            fontWeight: 700, 
+                            color,
+                            lineHeight: 1.2
+                        }}
+                    >
+                        {icon && <span style={{ marginRight: 4 }}>{icon}</span>}
+                        {value}
+                    </div>
+                    <div style={{ 
+                        fontSize: 11, 
+                        color: 'var(--text-muted)', 
+                        marginTop: 4,
+                        textTransform: 'uppercase',
+                        letterSpacing: '0.05em'
+                    }}>
+                        {label}
+                    </div>
+                </div>
+            );
+        }
+
+        function Badge({ children, variant = 'default' }) {
+            const styles = {
+                default: { background: 'var(--bg-elevated)', color: 'var(--text-secondary)' },
+                success: { background: 'var(--accent-green-soft)', color: 'var(--accent-green)' },
+                error: { background: 'var(--accent-red-soft)', color: 'var(--accent-red)' },
+                warning: { background: 'var(--accent-yellow-soft)', color: 'var(--accent-yellow)' },
+                info: { background: 'var(--accent-blue-soft)', color: 'var(--accent-blue)' }
+            };
+            
+            return (
+                <span style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    padding: '4px 10px',
+                    borderRadius: 6,
+                    fontSize: 12,
+                    fontWeight: 600,
+                    ...styles[variant]
+                }}>
+                    {children}
+                </span>
+            );
+        }
+
+        // ============================================================
+        // COMPONENTS: Feedback Overlay
+        // ============================================================
+        
+        function FeedbackOverlay() {
+            const { feedback } = useApp();
+            
+            if (!feedback) return null;
+            
+            const colors = {
+                success: { bg: 'rgba(0, 230, 118, 0.12)', border: 'var(--accent-green)', text: 'var(--accent-green)' },
+                error: { bg: 'rgba(255, 82, 82, 0.12)', border: 'var(--accent-red)', text: 'var(--accent-red)' },
+                warning: { bg: 'rgba(255, 215, 64, 0.12)', border: 'var(--accent-yellow)', text: 'var(--accent-yellow)' }
+            };
+            
+            const c = colors[feedback.type];
+            
+            return (
+                <div 
+                    className="animate-fadeIn"
+                    style={{
+                        position: 'fixed',
+                        inset: 0,
+                        zIndex: 9999,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        background: c.bg,
+                        pointerEvents: 'none'
+                    }}
+                >
+                    <div style={{
+                        padding: '32px 48px',
+                        background: 'var(--bg-secondary)',
+                        borderRadius: 'var(--radius-xl)',
+                        border: `3px solid ${c.border}`,
+                        boxShadow: `0 0 60px ${c.border}30`,
+                        textAlign: 'center',
+                        animation: 'pulse 0.3s ease-out'
+                    }}>
+                        <div 
+                            className="mono"
+                            style={{
+                                fontSize: 26,
+                                fontWeight: 700,
+                                color: c.text,
+                                marginBottom: 8,
+                                letterSpacing: 1
+                            }}
+                        >
+                            {feedback.message}
+                        </div>
+                        <div 
+                            className="mono"
+                            style={{
+                                fontSize: 14,
+                                color: 'var(--text-secondary)'
+                            }}
+                        >
+                            {feedback.upc}
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+
+        // ============================================================
+        // VIEWS: Home
+        // ============================================================
+        
+        function HomeView() {
+            const { 
+                fileLoaded, 
+                saldiCount, 
+                currentPanel, 
+                setView, 
+                loadExcel, 
+                clearAll,
+                getStats 
+            } = useApp();
+            
+            const fileInputRef = useRef(null);
+            const [uploading, setUploading] = useState(false);
+            const stats = getStats();
+
+            const handleFileChange = async (e) => {
+                const file = e.target.files?.[0];
+                if (!file) return;
+                
+                setUploading(true);
+                try {
+                    const result = await loadExcel(file);
+                    alert(`✓ Caricati ${result.count} codici UPC` + 
+                          (result.skipped > 0 ? `\n(${result.skipped} righe saltate)` : ''));
+                } catch (err) {
+                    alert('❌ ' + err.message);
+                } finally {
+                    setUploading(false);
+                    e.target.value = '';
+                }
+            };
+
+            const handleClear = () => {
+                if (confirm('Cancellare TUTTI i dati?\n\n• Lista saldi\n• Pannelli\n• Scansioni')) {
+                    clearAll();
+                }
+            };
+
+            return (
+                <div className="flex flex-col flex-1 overflow-auto safe-top safe-bottom animate-fadeIn">
+                    <div className="p-5 flex flex-col gap-4">
+                        
+                        {/* Header */}
+                        <header className="text-center" style={{ padding: '24px 0 16px' }}>
+                            <h1 style={{ 
+                                fontSize: 36, 
+                                fontWeight: 700,
+                                background: 'linear-gradient(135deg, var(--accent-green) 0%, var(--accent-blue) 100%)',
+                                WebkitBackgroundClip: 'text',
+                                WebkitTextFillColor: 'transparent',
+                                marginBottom: 6
+                            }}>
+                                SALDI SCANNER
+                            </h1>
+                            <p style={{ color: 'var(--text-muted)', fontSize: 14 }}>
+                                Scansiona • Verifica • Organizza
+                            </p>
+                        </header>
+
+                        {/* Panel Selector */}
+                        <button 
+                            className="btn btn-secondary w-full"
+                            onClick={() => setView('panels')}
+                            style={{ justifyContent: 'space-between' }}
+                        >
+                            <span>📋 {currentPanel}</span>
+                            <span style={{ color: 'var(--text-muted)', fontSize: 13 }}>Cambia →</span>
+                        </button>
+
+                        {/* Stats Card */}
+                        <div className="card">
+                            <div style={{ 
+                                display: 'grid', 
+                                gridTemplateColumns: 'repeat(2, 1fr)', 
+                                gap: 20 
+                            }}>
+                                <StatCard 
+                                    label="Lista Saldi" 
+                                    value={saldiCount} 
+                                    color="var(--accent-blue)" 
+                                />
+                                <StatCard 
+                                    label="Scansionati" 
+                                    value={stats.total} 
+                                    color="var(--text-primary)" 
+                                />
+                                <StatCard 
+                                    label="Trovati" 
+                                    value={stats.saldiFound} 
+                                    color="var(--accent-green)" 
+                                />
+                                <StatCard 
+                                    label="Non Saldi" 
+                                    value={stats.notSaldi} 
+                                    color="var(--accent-red)" 
+                                />
+                            </div>
+                            
+                            {stats.eccedenze > 0 && (
+                                <div style={{
+                                    marginTop: 16,
+                                    padding: 12,
+                                    background: 'var(--accent-yellow-soft)',
+                                    borderRadius: 'var(--radius-sm)',
+                                    color: 'var(--accent-yellow)',
+                                    fontSize: 13,
+                                    textAlign: 'center',
+                                    fontWeight: 500
+                                }}>
+                                    ⚠️ {stats.eccedenze} codici in eccedenza
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Upload Button */}
+                        <input 
+                            ref={fileInputRef}
+                            type="file" 
+                            accept=".xlsx,.xls,.csv"
+                            onChange={handleFileChange}
+                            style={{ display: 'none' }}
+                        />
+                        <button 
+                            className={`btn w-full ${fileLoaded ? 'btn-secondary' : 'btn-primary'}`}
+                            onClick={() => fileInputRef.current?.click()}
+                            disabled={uploading}
+                        >
+                            {uploading ? '⏳ Caricamento...' : (
+                                <>📁 {fileLoaded ? 'Ricarica Lista Excel' : 'Carica Lista Saldi'}</>
+                            )}
+                        </button>
+
+                        {/* Scanner Button */}
+                        {fileLoaded && (
+                            <button 
+                                className="btn btn-primary btn-lg w-full"
+                                onClick={() => setView('scanner')}
+                                style={{ marginTop: 8 }}
+                            >
+                                📷 AVVIA SCANNER
+                            </button>
+                        )}
+
+                        {/* History Button */}
+                        {stats.total > 0 && (
+                            <button 
+                                className="btn btn-ghost w-full"
+                                onClick={() => setView('history')}
+                            >
+                                📜 Storico Scansioni
+                            </button>
+                        )}
+
+                        {/* Spacer */}
+                        <div style={{ flex: 1, minHeight: 20 }} />
+
+                        {/* Reset Button */}
+                        <button 
+                            className="btn btn-danger btn-sm w-full"
+                            onClick={handleClear}
+                            style={{ opacity: 0.7 }}
+                        >
+                            🗑 Reset Completo
+                        </button>
+                    </div>
+                </div>
+            );
+        }
+
+        // ============================================================
+        // VIEWS: Scanner (Full Implementation - Fixed)
+        // ============================================================
+        
+        function ScannerView() {
+            const { setView, currentPanel, getStats, handleScan, scans } = useApp();
+            const stats = getStats();
+            const lastScan = scans[currentPanel]?.slice(-1)[0];
+            
+            // Refs
+            const videoRef = useRef(null);
+            const canvasRef = useRef(null);
+            const codeReaderRef = useRef(null);
+            const animationRef = useRef(null);
+            const streamRef = useRef(null);
+            const lastScanRef = useRef({ code: '', time: 0 });
+            
+            // State
+            const [status, setStatus] = useState('initializing');
+            const [error, setError] = useState(null);
+            const [debug, setDebug] = useState('Avvio...');
+            const [torchOn, setTorchOn] = useState(false);
+            const [torchSupported, setTorchSupported] = useState(false);
+            const [showDebug, setShowDebug] = useState(true);
+            
+            // Debounce
+            const DEBOUNCE_MS = 1500;
+
+            useEffect(() => {
+                let mounted = true;
+                let scanInterval = null;
+                
+                const initCamera = async () => {
+                    try {
+                        setDebug('Richiedo permessi camera...');
+                        
+                        // Request camera with optimal settings for barcode scanning
+                        const constraints = {
+                            video: {
+                                facingMode: { ideal: 'environment' },
+                                width: { ideal: 1920, min: 1280 },
+                                height: { ideal: 1080, min: 720 },
+                                focusMode: { ideal: 'continuous' },
+                                exposureMode: { ideal: 'continuous' },
+                                whiteBalanceMode: { ideal: 'continuous' }
+                            },
+                            audio: false
+                        };
+                        
+                        const stream = await navigator.mediaDevices.getUserMedia(constraints);
+                        
+                        if (!mounted) {
+                            stream.getTracks().forEach(t => t.stop());
+                            return;
+                        }
+                        
+                        streamRef.current = stream;
+                        
+                        // Get track info
+                        const track = stream.getVideoTracks()[0];
+                        const settings = track.getSettings();
+                        setDebug(`Camera: ${settings.width}x${settings.height}`);
+                        
+                        // Check torch support
+                        const capabilities = track.getCapabilities?.() || {};
+                        if (capabilities.torch) {
+                            setTorchSupported(true);
+                        }
+                        
+                        // Apply optimal settings if supported
+                        try {
+                            const advancedConstraints = {};
+                            if (capabilities.focusMode?.includes('continuous')) {
+                                advancedConstraints.focusMode = 'continuous';
+                            }
+                            if (capabilities.exposureMode?.includes('continuous')) {
+                                advancedConstraints.exposureMode = 'continuous';
+                            }
+                            if (Object.keys(advancedConstraints).length > 0) {
+                                await track.applyConstraints({ advanced: [advancedConstraints] });
+                            }
+                        } catch (e) {
+                            console.log('Advanced constraints not supported:', e);
+                        }
+                        
+                        // Connect to video element
+                        if (videoRef.current) {
+                            videoRef.current.srcObject = stream;
+                            await videoRef.current.play();
+                            setDebug(`Video attivo: ${videoRef.current.videoWidth}x${videoRef.current.videoHeight}`);
+                        }
+                        
+                        // Initialize ZXing
+                        setDebug('Inizializzo scanner barcode...');
+                        
+                        const hints = new Map();
+                        hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [
+                            ZXing.BarcodeFormat.EAN_13,
+                            ZXing.BarcodeFormat.EAN_8,
+                            ZXing.BarcodeFormat.UPC_A,
+                            ZXing.BarcodeFormat.UPC_E,
+                            ZXing.BarcodeFormat.CODE_128,
+                            ZXing.BarcodeFormat.CODE_39
+                        ]);
+                        hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
+                        
+                        codeReaderRef.current = new ZXing.BrowserMultiFormatReader(hints);
+                        
+                        if (mounted) {
+                            setStatus('scanning');
+                            setDebug('Scanner pronto - inquadra barcode');
+                            
+                            // Start continuous scanning
+                            startScanning();
+                        }
+                        
+                    } catch (err) {
+                        console.error('Camera init error:', err);
+                        if (mounted) {
+                            setStatus('error');
+                            setError(err.name === 'NotAllowedError' 
+                                ? 'Permesso camera negato. Vai nelle impostazioni del browser e consenti l\'accesso alla fotocamera.'
+                                : err.message || 'Errore accesso camera');
+                            setDebug('Errore: ' + err.message);
+                        }
+                    }
+                };
+                
+                const startScanning = () => {
+                    const scan = async () => {
+                        if (!mounted || !videoRef.current || !codeReaderRef.current) return;
+                        if (videoRef.current.readyState !== 4) {
+                            animationRef.current = requestAnimationFrame(scan);
+                            return;
+                        }
+                        
+                        try {
+                            // Create canvas for frame capture
+                            const video = videoRef.current;
+                            const canvas = canvasRef.current;
+                            
+                            if (!canvas) {
+                                animationRef.current = requestAnimationFrame(scan);
+                                return;
+                            }
+                            
+                            canvas.width = video.videoWidth;
+                            canvas.height = video.videoHeight;
+                            
+                            const ctx = canvas.getContext('2d', { willReadFrequently: true });
+                            ctx.drawImage(video, 0, 0);
+                            
+                            // Get image data for ZXing
+                            const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                            const luminanceSource = new ZXing.RGBLuminanceSource(
+                                imageData.data,
+                                canvas.width,
+                                canvas.height
+                            );
+                            const binaryBitmap = new ZXing.BinaryBitmap(
+                                new ZXing.HybridBinarizer(luminanceSource)
+                            );
+                            
+                            try {
+                                const result = codeReaderRef.current.decodeBitmap(binaryBitmap);
+                                
+                                if (result) {
+                                    const code = result.getText();
+                                    const now = Date.now();
+                                    
+                                    if (now - lastScanRef.current.time >= DEBOUNCE_MS || 
+                                        code !== lastScanRef.current.code) {
+                                        lastScanRef.current = { code, time: now };
+                                        setDebug(`✓ Letto: ${code}`);
+                                        handleScan(code);
+                                    }
+                                }
+                            } catch (e) {
+                                // No barcode found - this is normal
+                            }
+                            
+                        } catch (e) {
+                            console.log('Scan frame error:', e);
+                        }
+                        
+                        // Continue scanning
+                        if (mounted) {
+                            animationRef.current = requestAnimationFrame(scan);
+                        }
+                    };
+                    
+                    scan();
+                };
+                
+                initCamera();
+                
+                return () => {
+                    mounted = false;
+                    if (animationRef.current) {
+                        cancelAnimationFrame(animationRef.current);
+                    }
+                    if (streamRef.current) {
+                        streamRef.current.getTracks().forEach(track => track.stop());
+                    }
+                };
+            }, [handleScan]);
+
+            // Toggle torch
+            const toggleTorch = async () => {
+                if (!streamRef.current || !torchSupported) return;
+                try {
+                    const track = streamRef.current.getVideoTracks()[0];
+                    const newState = !torchOn;
+                    await track.applyConstraints({ advanced: [{ torch: newState }] });
+                    setTorchOn(newState);
+                    setDebug(newState ? 'Flash ON' : 'Flash OFF');
+                } catch (e) {
+                    setDebug('Errore flash: ' + e.message);
+                }
+            };
+
+            // Manual UPC input for testing
+            const [manualUpc, setManualUpc] = useState('');
+            const handleManualScan = () => {
+                if (manualUpc.trim()) {
+                    handleScan(manualUpc.trim());
+                    setManualUpc('');
+                }
+            };
+
+            return (
+                <div className="flex flex-col flex-1" style={{ background: '#000' }}>
+                    {/* Hidden canvas for frame processing */}
+                    <canvas ref={canvasRef} style={{ display: 'none' }} />
+                    
+                    {/* Header */}
+                    <div 
+                        className="flex items-center justify-between" 
+                        style={{ 
+                            padding: '12px 16px',
+                            background: 'var(--bg-secondary)',
+                            zIndex: 10
+                        }}
+                    >
+                        <button 
+                            className="btn btn-sm btn-secondary" 
+                            onClick={() => setView('home')}
+                        >
+                            ← Esci
+                        </button>
+                        
+                        <span style={{ 
+                            fontSize: 13, 
+                            color: 'var(--text-muted)',
+                            maxWidth: 120,
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            whiteSpace: 'nowrap'
+                        }}>
+                            📋 {currentPanel}
+                        </span>
+                        
+                        <div className="mono flex items-center gap-3" style={{ fontSize: 14 }}>
+                            <span style={{ color: 'var(--accent-green)' }}>{stats.saldiFound}</span>
+                            <span style={{ color: 'var(--text-muted)' }}>/</span>
+                            <span style={{ color: 'var(--accent-red)' }}>{stats.notSaldi}</span>
+                        </div>
+                    </div>
+
+                    {/* Camera Area */}
+                    <div className="flex-1 relative" style={{ overflow: 'hidden' }}>
+                        
+                        {/* Video Element */}
+                        <video 
+                            ref={videoRef}
+                            style={{
+                                position: 'absolute',
+                                top: 0,
+                                left: 0,
+                                width: '100%',
+                                height: '100%',
+                                objectFit: 'cover'
+                            }}
+                            playsInline
+                            autoPlay
+                            muted
+                        />
+                        
+                        {/* Scan Guide Overlay */}
+                        {status === 'scanning' && (
+                            <div 
+                                style={{
+                                    position: 'absolute',
+                                    inset: 0,
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    pointerEvents: 'none'
+                                }}
+                            >
+                                <div style={{
+                                    position: 'absolute',
+                                    inset: 0,
+                                    background: 'rgba(0, 0, 0, 0.5)'
+                                }} />
+                                
+                                <div style={{
+                                    position: 'relative',
+                                    width: '90%',
+                                    maxWidth: 350,
+                                    height: 150,
+                                    background: 'transparent',
+                                    boxShadow: '0 0 0 9999px rgba(0, 0, 0, 0.5)',
+                                    borderRadius: 16,
+                                    border: '3px solid var(--accent-green)'
+                                }}>
+                                    <div style={{
+                                        position: 'absolute',
+                                        top: '50%',
+                                        left: 20,
+                                        right: 20,
+                                        height: 2,
+                                        background: 'linear-gradient(90deg, transparent, var(--accent-green), transparent)',
+                                        animation: 'scanLine 1.5s ease-in-out infinite'
+                                    }} />
+                                </div>
+                                
+                                <div style={{
+                                    position: 'absolute',
+                                    bottom: 140,
+                                    left: 0,
+                                    right: 0,
+                                    textAlign: 'center',
+                                    color: '#fff',
+                                    fontSize: 15,
+                                    fontWeight: 500,
+                                    textShadow: '0 2px 4px rgba(0,0,0,0.8)'
+                                }}>
+                                    Inquadra il codice a barre
+                                </div>
+                            </div>
+                        )}
+                        
+                        {/* Debug Info */}
+                        {showDebug && (
+                            <div style={{
+                                position: 'absolute',
+                                top: 10,
+                                left: 10,
+                                right: 60,
+                                padding: '8px 12px',
+                                background: 'rgba(0,0,0,0.7)',
+                                borderRadius: 8,
+                                fontSize: 11,
+                                color: '#0f0',
+                                fontFamily: 'monospace',
+                                zIndex: 20
+                            }}>
+                                {debug}
+                            </div>
+                        )}
+                        
+                        {/* Loading State */}
+                        {status === 'initializing' && (
+                            <div 
+                                className="flex flex-col items-center justify-center"
+                                style={{
+                                    position: 'absolute',
+                                    inset: 0,
+                                    background: 'var(--bg-primary)',
+                                    color: 'var(--text-secondary)'
+                                }}
+                            >
+                                <div style={{ 
+                                    fontSize: 48, 
+                                    marginBottom: 16,
+                                    animation: 'pulse 1.5s ease-in-out infinite'
+                                }}>
+                                    📷
+                                </div>
+                                <p>Avvio fotocamera...</p>
+                                <p style={{ fontSize: 12, marginTop: 8, color: 'var(--text-muted)' }}>{debug}</p>
+                            </div>
+                        )}
+                        
+                        {/* Error State */}
+                        {status === 'error' && (
+                            <div 
+                                className="flex flex-col items-center justify-center p-5"
+                                style={{
+                                    position: 'absolute',
+                                    inset: 0,
+                                    background: 'var(--bg-primary)',
+                                    textAlign: 'center'
+                                }}
+                            >
+                                <div style={{ fontSize: 48, marginBottom: 16 }}>⚠️</div>
+                                <p style={{ 
+                                    color: 'var(--accent-red)', 
+                                    marginBottom: 8,
+                                    fontWeight: 600
+                                }}>
+                                    {error}
+                                </p>
+                                <p style={{ 
+                                    color: 'var(--text-muted)', 
+                                    fontSize: 13,
+                                    marginBottom: 24,
+                                    maxWidth: 280
+                                }}>
+                                    Controlla le impostazioni del browser e riprova.
+                                </p>
+                                <button 
+                                    className="btn btn-primary"
+                                    onClick={() => window.location.reload()}
+                                >
+                                    🔄 Ricarica pagina
+                                </button>
+                            </div>
+                        )}
+                        
+                        {/* Controls */}
+                        {status === 'scanning' && (
+                            <div style={{
+                                position: 'absolute',
+                                top: 10,
+                                right: 10,
+                                display: 'flex',
+                                flexDirection: 'column',
+                                gap: 8,
+                                zIndex: 20
+                            }}>
+                                {torchSupported && (
+                                    <button
+                                        onClick={toggleTorch}
+                                        style={{
+                                            width: 44,
+                                            height: 44,
+                                            borderRadius: '50%',
+                                            border: 'none',
+                                            background: torchOn ? 'var(--accent-yellow)' : 'rgba(0,0,0,0.6)',
+                                            color: torchOn ? '#000' : '#fff',
+                                            fontSize: 18,
+                                            cursor: 'pointer'
+                                        }}
+                                    >
+                                        {torchOn ? '🔦' : '💡'}
+                                    </button>
+                                )}
+                                <button
+                                    onClick={() => setShowDebug(!showDebug)}
+                                    style={{
+                                        width: 44,
+                                        height: 44,
+                                        borderRadius: '50%',
+                                        border: 'none',
+                                        background: 'rgba(0,0,0,0.6)',
+                                        color: '#fff',
+                                        fontSize: 18,
+                                        cursor: 'pointer'
+                                    }}
+                                >
+                                    🐛
+                                </button>
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Manual Input Fallback */}
+                    <div style={{
+                        padding: '12px 16px',
+                        background: 'var(--bg-tertiary)',
+                        borderTop: '1px solid var(--border-subtle)'
+                    }}>
+                        <div style={{ 
+                            fontSize: 11, 
+                            color: 'var(--text-muted)', 
+                            marginBottom: 8,
+                            textAlign: 'center'
+                        }}>
+                            Se la camera non legge, inserisci manualmente:
+                        </div>
+                        <div className="flex gap-2">
+                            <input
+                                type="text"
+                                inputMode="numeric"
+                                placeholder="Inserisci UPC"
+                                value={manualUpc}
+                                onChange={(e) => setManualUpc(e.target.value)}
+                                onKeyDown={(e) => e.key === 'Enter' && handleManualScan()}
+                                className="mono"
+                                style={{
+                                    flex: 1,
+                                    padding: '12px 14px',
+                                    background: 'var(--bg-secondary)',
+                                    border: '1px solid var(--border-medium)',
+                                    borderRadius: 'var(--radius-md)',
+                                    color: 'var(--text-primary)',
+                                    fontSize: 16
+                                }}
+                            />
+                            <button 
+                                className="btn btn-primary"
+                                onClick={handleManualScan}
+                                disabled={!manualUpc.trim()}
+                            >
+                                OK
+                            </button>
+                        </div>
+                    </div>
+
+                    {/* Last Scan Footer */}
+                    {lastScan && (
+                        <div style={{
+                            padding: 16,
+                            background: lastScan.isSaldo 
+                                ? 'linear-gradient(to top, var(--accent-green-soft), var(--bg-secondary))'
+                                : 'linear-gradient(to top, var(--accent-red-soft), var(--bg-secondary))',
+                            borderTop: `2px solid ${lastScan.isSaldo ? 'var(--accent-green)' : 'var(--accent-red)'}`
+                        }}>
+                            <div className="flex justify-between items-center">
+                                <div style={{ minWidth: 0, flex: 1 }}>
+                                    <div 
+                                        className="mono" 
+                                        style={{ 
+                                            fontSize: 17,
+                                            fontWeight: 600,
+                                            color: lastScan.isSaldo ? 'var(--accent-green)' : 'var(--accent-red)'
+                                        }}
+                                    >
+                                        {lastScan.upc}
+                                    </div>
+                                    <div style={{ 
+                                        fontSize: 12, 
+                                        color: 'var(--text-muted)', 
+                                        marginTop: 3 
+                                    }}>
+                                        {lastScan.isSaldo ? '✓ In saldo' : '✗ Non in saldo'}
+                                    </div>
+                                </div>
+                                
+                                {lastScan.isSaldo && (
+                                    <div 
+                                        className="mono"
+                                        style={{
+                                            marginLeft: 12,
+                                            padding: '8px 14px',
+                                            background: lastScan.count > lastScan.total 
+                                                ? 'var(--accent-yellow)' 
+                                                : 'var(--accent-green)',
+                                            color: 'var(--bg-primary)',
+                                            borderRadius: 8,
+                                            fontWeight: 700,
+                                            fontSize: 15
+                                        }}
+                                    >
+                                        {lastScan.count}/{lastScan.total}
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    )}
+                </div>
+            );
+        }
+
+        // ============================================================
+        // VIEWS: History (Full Implementation)
+        // ============================================================
+        
+        function HistoryView() {
+            const { setView, currentPanel, scans, saldiList, getStats } = useApp();
+            const stats = getStats();
+            const panelScans = scans[currentPanel] || [];
+            
+            // Filter state
+            const [filter, setFilter] = useState('all'); // all, saldi, notsaldi, eccedenze, incomplete
+            const [sortBy, setSortBy] = useState('time'); // time, upc, count
+            const [searchQuery, setSearchQuery] = useState('');
+            
+            // Build summary grouped by UPC
+            const summary = useMemo(() => {
+                const grouped = {};
+                
+                panelScans.forEach(scan => {
+                    if (!grouped[scan.upc]) {
+                        grouped[scan.upc] = {
+                            upc: scan.upc,
+                            count: 0,
+                            total: saldiList[scan.upc] || 0,
+                            isSaldo: scan.isSaldo,
+                            firstScan: scan.timestamp,
+                            lastScan: scan.timestamp,
+                            scans: []
+                        };
+                    }
+                    grouped[scan.upc].count++;
+                    grouped[scan.upc].lastScan = Math.max(grouped[scan.upc].lastScan, scan.timestamp);
+                    grouped[scan.upc].firstScan = Math.min(grouped[scan.upc].firstScan, scan.timestamp);
+                    grouped[scan.upc].scans.push(scan);
+                });
+                
+                return Object.values(grouped);
+            }, [panelScans, saldiList]);
+            
+            // Filter and sort
+            const filteredSummary = useMemo(() => {
+                let result = [...summary];
+                
+                // Apply filter
+                switch (filter) {
+                    case 'saldi':
+                        result = result.filter(s => s.isSaldo);
+                        break;
+                    case 'notsaldi':
+                        result = result.filter(s => !s.isSaldo);
+                        break;
+                    case 'eccedenze':
+                        result = result.filter(s => s.isSaldo && s.count > s.total);
+                        break;
+                    case 'incomplete':
+                        result = result.filter(s => s.isSaldo && s.count < s.total);
+                        break;
+                }
+                
+                // Apply search
+                if (searchQuery.trim()) {
+                    const q = searchQuery.trim().toLowerCase();
+                    result = result.filter(s => s.upc.includes(q));
+                }
+                
+                // Apply sort
+                switch (sortBy) {
+                    case 'time':
+                        result.sort((a, b) => b.lastScan - a.lastScan);
+                        break;
+                    case 'upc':
+                        result.sort((a, b) => a.upc.localeCompare(b.upc));
+                        break;
+                    case 'count':
+                        result.sort((a, b) => b.count - a.count);
+                        break;
+                }
+                
+                return result;
+            }, [summary, filter, sortBy, searchQuery]);
+            
+            // Compute filter counts
+            const filterCounts = useMemo(() => ({
+                all: summary.length,
+                saldi: summary.filter(s => s.isSaldo).length,
+                notsaldi: summary.filter(s => !s.isSaldo).length,
+                eccedenze: summary.filter(s => s.isSaldo && s.count > s.total).length,
+                incomplete: summary.filter(s => s.isSaldo && s.count < s.total).length
+            }), [summary]);
+            
+            // Export function
+            const exportReport = () => {
+                const lines = [
+                    `REPORT SCANSIONI - ${currentPanel}`,
+                    `Data: ${new Date().toLocaleString('it-IT')}`,
+                    ``,
+                    `RIEPILOGO:`,
+                    `- Totale scansioni: ${stats.total}`,
+                    `- Articoli in saldo trovati: ${stats.saldiFound}`,
+                    `- Articoli non in saldo: ${stats.notSaldi}`,
+                    `- Codici in eccedenza: ${stats.eccedenze}`,
+                    ``,
+                    `DETTAGLIO PER CODICE:`,
+                    ``
+                ];
+                
+                // Saldi trovati
+                const saldiItems = summary.filter(s => s.isSaldo).sort((a, b) => a.upc.localeCompare(b.upc));
+                if (saldiItems.length > 0) {
+                    lines.push(`--- IN SALDO (${saldiItems.length}) ---`);
+                    saldiItems.forEach(item => {
+                        const status = item.count > item.total ? ' [ECCEDENZA]' : 
+                                      item.count === item.total ? ' [COMPLETO]' : ' [INCOMPLETO]';
+                        lines.push(`${item.upc}: ${item.count}/${item.total}${status}`);
+                    });
+                    lines.push(``);
+                }
+                
+                // Non saldi
+                const noSaldiItems = summary.filter(s => !s.isSaldo).sort((a, b) => a.upc.localeCompare(b.upc));
+                if (noSaldiItems.length > 0) {
+                    lines.push(`--- NON IN SALDO (${noSaldiItems.length}) ---`);
+                    noSaldiItems.forEach(item => {
+                        lines.push(`${item.upc}: ${item.count} scansioni`);
+                    });
+                }
+                
+                const text = lines.join('\n');
+                const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `saldi-report-${currentPanel.replace(/\s+/g, '-')}-${new Date().toISOString().split('T')[0]}.txt`;
+                a.click();
+                URL.revokeObjectURL(url);
+            };
+
+            // Filter tabs config
+            const filters = [
+                { key: 'all', label: 'Tutti', count: filterCounts.all },
+                { key: 'saldi', label: 'Saldi', count: filterCounts.saldi, color: 'var(--accent-green)' },
+                { key: 'notsaldi', label: 'No Saldi', count: filterCounts.notsaldi, color: 'var(--accent-red)' },
+                { key: 'eccedenze', label: 'Eccedenze', count: filterCounts.eccedenze, color: 'var(--accent-yellow)' },
+                { key: 'incomplete', label: 'Incompleti', count: filterCounts.incomplete, color: 'var(--accent-blue)' }
+            ];
+
+            return (
+                <div className="flex flex-col flex-1 animate-fadeIn">
+                    {/* Header */}
+                    <div style={{ 
+                        background: 'var(--bg-secondary)', 
+                        borderBottom: '1px solid var(--border-subtle)' 
+                    }}>
+                        <div className="flex items-center justify-between p-4">
+                            <button 
+                                className="btn btn-sm btn-secondary" 
+                                onClick={() => setView('home')}
+                            >
+                                ← Indietro
+                            </button>
+                            <span style={{ fontWeight: 600 }}>📜 {currentPanel}</span>
+                            <button 
+                                className="btn btn-sm btn-ghost"
+                                onClick={exportReport}
+                                disabled={summary.length === 0}
+                                style={{ opacity: summary.length === 0 ? 0.5 : 1 }}
+                            >
+                                📤 Export
+                            </button>
+                        </div>
+                        
+                        {/* Search */}
+                        <div style={{ padding: '0 16px 12px' }}>
+                            <input
+                                type="text"
+                                placeholder="🔍 Cerca UPC..."
+                                value={searchQuery}
+                                onChange={(e) => setSearchQuery(e.target.value)}
+                                className="mono"
+                                style={{
+                                    width: '100%',
+                                    padding: '10px 14px',
+                                    background: 'var(--bg-tertiary)',
+                                    border: '1px solid var(--border-subtle)',
+                                    borderRadius: 'var(--radius-md)',
+                                    color: 'var(--text-primary)',
+                                    fontSize: 14
+                                }}
+                            />
+                        </div>
+                        
+                        {/* Filter Tabs */}
+                        <div style={{ 
+                            display: 'flex', 
+                            gap: 6,
+                            padding: '0 16px 12px',
+                            overflowX: 'auto',
+                            WebkitOverflowScrolling: 'touch'
+                        }}>
+                            {filters.map(f => (
+                                <button
+                                    key={f.key}
+                                    onClick={() => setFilter(f.key)}
+                                    style={{
+                                        flexShrink: 0,
+                                        padding: '6px 12px',
+                                        background: filter === f.key ? 'var(--bg-elevated)' : 'transparent',
+                                        border: `1px solid ${filter === f.key ? (f.color || 'var(--border-medium)') : 'var(--border-subtle)'}`,
+                                        borderRadius: 20,
+                                        color: filter === f.key ? (f.color || 'var(--text-primary)') : 'var(--text-muted)',
+                                        fontSize: 12,
+                                        fontWeight: 500,
+                                        cursor: 'pointer',
+                                        transition: 'all 0.15s ease'
+                                    }}
+                                >
+                                    {f.label} ({f.count})
+                                </button>
+                            ))}
+                        </div>
+                        
+                        {/* Sort Options */}
+                        <div style={{ 
+                            display: 'flex', 
+                            gap: 8,
+                            padding: '0 16px 12px',
+                            alignItems: 'center'
+                        }}>
+                            <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Ordina:</span>
+                            {[
+                                { key: 'time', label: '🕐 Recenti' },
+                                { key: 'upc', label: '🔢 UPC' },
+                                { key: 'count', label: '📊 Quantità' }
+                            ].map(s => (
+                                <button
+                                    key={s.key}
+                                    onClick={() => setSortBy(s.key)}
+                                    style={{
+                                        padding: '4px 10px',
+                                        background: sortBy === s.key ? 'var(--bg-elevated)' : 'transparent',
+                                        border: 'none',
+                                        borderRadius: 6,
+                                        color: sortBy === s.key ? 'var(--text-primary)' : 'var(--text-muted)',
+                                        fontSize: 12,
+                                        cursor: 'pointer'
+                                    }}
+                                >
+                                    {s.label}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+
+                    {/* List */}
+                    <div className="flex-1 overflow-auto p-4">
+                        {filteredSummary.length === 0 ? (
+                            <div className="flex flex-col items-center justify-center" style={{ 
+                                height: '100%',
+                                color: 'var(--text-muted)'
+                            }}>
+                                <div style={{ fontSize: 48, marginBottom: 12 }}>📭</div>
+                                <p>{searchQuery ? 'Nessun risultato trovato' : 'Nessuna scansione'}</p>
+                            </div>
+                        ) : (
+                            filteredSummary.map(item => (
+                                <HistoryItem key={item.upc} item={item} />
+                            ))
+                        )}
+                    </div>
+
+                    {/* Summary Footer */}
+                    <div style={{
+                        padding: 16,
+                        background: 'var(--bg-secondary)',
+                        borderTop: '1px solid var(--border-subtle)',
+                        display: 'grid',
+                        gridTemplateColumns: 'repeat(4, 1fr)',
+                        gap: 8,
+                        textAlign: 'center'
+                    }}>
+                        <div>
+                            <div className="mono" style={{ color: 'var(--text-primary)', fontSize: 18, fontWeight: 700 }}>
+                                {stats.total}
+                            </div>
+                            <div style={{ fontSize: 9, color: 'var(--text-muted)', textTransform: 'uppercase' }}>Totale</div>
+                        </div>
+                        <div>
+                            <div className="mono" style={{ color: 'var(--accent-green)', fontSize: 18, fontWeight: 700 }}>
+                                {stats.saldiFound}
+                            </div>
+                            <div style={{ fontSize: 9, color: 'var(--text-muted)', textTransform: 'uppercase' }}>Saldi</div>
+                        </div>
+                        <div>
+                            <div className="mono" style={{ color: 'var(--accent-red)', fontSize: 18, fontWeight: 700 }}>
+                                {stats.notSaldi}
+                            </div>
+                            <div style={{ fontSize: 9, color: 'var(--text-muted)', textTransform: 'uppercase' }}>No Saldi</div>
+                        </div>
+                        <div>
+                            <div className="mono" style={{ color: 'var(--accent-yellow)', fontSize: 18, fontWeight: 700 }}>
+                                {stats.eccedenze}
+                            </div>
+                            <div style={{ fontSize: 9, color: 'var(--text-muted)', textTransform: 'uppercase' }}>Eccedenze</div>
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+        
+        // History Item Component
+        function HistoryItem({ item }) {
+            const [expanded, setExpanded] = useState(false);
+            
+            const getStatus = () => {
+                if (!item.isSaldo) return { label: 'NO SALDO', color: 'var(--accent-red)', bg: 'var(--accent-red-soft)' };
+                if (item.count > item.total) return { label: 'ECCEDENZA', color: 'var(--accent-yellow)', bg: 'var(--accent-yellow-soft)' };
+                if (item.count === item.total) return { label: 'COMPLETO', color: 'var(--accent-green)', bg: 'var(--accent-green-soft)' };
+                return { label: 'INCOMPLETO', color: 'var(--accent-blue)', bg: 'var(--accent-blue-soft)' };
+            };
+            
+            const status = getStatus();
+            
+            return (
+                <div 
+                    style={{
+                        background: 'var(--bg-secondary)',
+                        borderRadius: 'var(--radius-md)',
+                        marginBottom: 10,
+                        borderLeft: `4px solid ${status.color}`,
+                        overflow: 'hidden'
+                    }}
+                >
+                    {/* Main Row */}
+                    <div 
+                        onClick={() => item.count > 1 && setExpanded(!expanded)}
+                        style={{
+                            padding: '14px 16px',
+                            cursor: item.count > 1 ? 'pointer' : 'default'
+                        }}
+                    >
+                        <div className="flex justify-between items-center">
+                            <div style={{ minWidth: 0, flex: 1 }}>
+                                <div className="mono" style={{ 
+                                    fontSize: 15, 
+                                    fontWeight: 600,
+                                    marginBottom: 4
+                                }}>
+                                    {item.upc}
+                                </div>
+                                <div style={{ 
+                                    fontSize: 11, 
+                                    color: 'var(--text-muted)',
+                                    display: 'flex',
+                                    gap: 8,
+                                    alignItems: 'center'
+                                }}>
+                                    <span>{new Date(item.lastScan).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })}</span>
+                                    {item.count > 1 && (
+                                        <span style={{ color: 'var(--text-secondary)' }}>
+                                            {expanded ? '▼' : '▶'} {item.count} scansioni
+                                        </span>
+                                    )}
+                                </div>
+                            </div>
+                            
+                            <div className="flex items-center gap-2">
+                                {item.isSaldo && (
+                                    <div 
+                                        className="mono"
+                                        style={{
+                                            padding: '4px 10px',
+                                            background: status.bg,
+                                            color: status.color,
+                                            borderRadius: 6,
+                                            fontSize: 13,
+                                            fontWeight: 600
+                                        }}
+                                    >
+                                        {item.count}/{item.total}
+                                    </div>
+                                )}
+                                <div style={{
+                                    padding: '4px 8px',
+                                    background: status.bg,
+                                    color: status.color,
+                                    borderRadius: 6,
+                                    fontSize: 10,
+                                    fontWeight: 600,
+                                    textTransform: 'uppercase',
+                                    letterSpacing: '0.03em'
+                                }}>
+                                    {status.label}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    {/* Expanded Details */}
+                    {expanded && item.count > 1 && (
+                        <div style={{
+                            padding: '0 16px 14px',
+                            borderTop: '1px solid var(--border-subtle)',
+                            marginTop: -4
+                        }}>
+                            <div style={{ 
+                                fontSize: 10, 
+                                color: 'var(--text-muted)', 
+                                marginBottom: 8,
+                                marginTop: 12,
+                                textTransform: 'uppercase',
+                                letterSpacing: '0.05em'
+                            }}>
+                                Dettaglio scansioni:
+                            </div>
+                            {item.scans.map((scan, idx) => (
+                                <div 
+                                    key={idx}
+                                    className="mono"
+                                    style={{
+                                        fontSize: 12,
+                                        color: 'var(--text-secondary)',
+                                        padding: '4px 0',
+                                        display: 'flex',
+                                        justifyContent: 'space-between'
+                                    }}
+                                >
+                                    <span>#{idx + 1}</span>
+                                    <span>{new Date(scan.timestamp).toLocaleString('it-IT', { 
+                                        hour: '2-digit', 
+                                        minute: '2-digit',
+                                        second: '2-digit'
+                                    })}</span>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                </div>
+            );
+        }
+
+        // ============================================================
+        // VIEWS: Panels (Full Implementation)
+        // ============================================================
+        
+        function PanelsView() {
+            const { setView, panels, currentPanel, setCurrentPanel, scans, saldiList, addPanel, deletePanel } = useApp();
+            const [renaming, setRenaming] = useState(null);
+            const [newName, setNewName] = useState('');
+
+            const handleAdd = () => {
+                const name = prompt('Nome nuovo pannello:');
+                if (name) {
+                    const result = addPanel(name);
+                    if (!result.success) alert(result.error);
+                }
+            };
+
+            const handleDelete = (name, e) => {
+                e.stopPropagation();
+                if (confirm(`Eliminare "${name}" e tutte le sue scansioni?`)) {
+                    const result = deletePanel(name);
+                    if (!result.success) alert(result.error);
+                }
+            };
+            
+            const handleSelect = (panel) => {
+                setCurrentPanel(panel);
+                setView('home');
+            };
+            
+            // Calculate panel stats
+            const getPanelStats = (panelName) => {
+                const panelScans = scans[panelName] || [];
+                const saldiFound = panelScans.filter(s => s.isSaldo);
+                const notSaldi = panelScans.filter(s => !s.isSaldo);
+                
+                // Count unique UPCs and their status
+                const uniqueUPCs = {};
+                saldiFound.forEach(s => {
+                    if (!uniqueUPCs[s.upc]) {
+                        uniqueUPCs[s.upc] = { count: 0, total: saldiList[s.upc] || 0 };
+                    }
+                    uniqueUPCs[s.upc].count++;
+                });
+                
+                let complete = 0, incomplete = 0, eccedenze = 0;
+                Object.values(uniqueUPCs).forEach(u => {
+                    if (u.count > u.total) eccedenze++;
+                    else if (u.count === u.total) complete++;
+                    else incomplete++;
+                });
+                
+                return {
+                    total: panelScans.length,
+                    saldiFound: saldiFound.length,
+                    notSaldi: notSaldi.length,
+                    uniqueCount: Object.keys(uniqueUPCs).length,
+                    complete,
+                    incomplete,
+                    eccedenze
+                };
+            };
+
+            // Clear panel scans
+            const clearPanelScans = (panelName, e) => {
+                e.stopPropagation();
+                if (confirm(`Cancellare tutte le scansioni di "${panelName}"?\n\n(Il pannello non verrà eliminato)`)) {
+                    // This needs to be added to context - for now show message
+                    alert('Funzione in arrivo');
+                }
+            };
+
+            return (
+                <div className="flex flex-col flex-1 animate-fadeIn">
+                    {/* Header */}
+                    <div style={{ 
+                        padding: 16,
+                        background: 'var(--bg-secondary)', 
+                        borderBottom: '1px solid var(--border-subtle)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between'
+                    }}>
+                        <button 
+                            className="btn btn-sm btn-secondary" 
+                            onClick={() => setView('home')}
+                        >
+                            ← Indietro
+                        </button>
+                        <span style={{ fontWeight: 600 }}>📋 Pannelli ({panels.length})</span>
+                        <button 
+                            className="btn btn-sm btn-primary" 
+                            onClick={handleAdd}
+                        >
+                            + Nuovo
+                        </button>
+                    </div>
+                    
+                    {/* Info Banner */}
+                    <div style={{
+                        padding: '12px 16px',
+                        background: 'var(--accent-blue-soft)',
+                        borderBottom: '1px solid var(--border-subtle)',
+                        fontSize: 12,
+                        color: 'var(--accent-blue)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 8
+                    }}>
+                        <span>💡</span>
+                        <span>Usa i pannelli per organizzare le scansioni per zona (es: Vetrina, Parete 1, Isola...)</span>
+                    </div>
+                    
+                    {/* Panels List */}
+                    <div className="flex-1 overflow-auto p-4">
+                        {panels.map(panel => {
+                            const stats = getPanelStats(panel);
+                            const isActive = panel === currentPanel;
+                            const hasScans = stats.total > 0;
+
+                            return (
+                                <div 
+                                    key={panel}
+                                    onClick={() => handleSelect(panel)}
+                                    style={{
+                                        background: isActive ? 'var(--bg-tertiary)' : 'var(--bg-secondary)',
+                                        borderRadius: 'var(--radius-lg)',
+                                        marginBottom: 12,
+                                        border: isActive 
+                                            ? '2px solid var(--accent-green)' 
+                                            : '1px solid var(--border-subtle)',
+                                        cursor: 'pointer',
+                                        overflow: 'hidden',
+                                        transition: 'all 0.15s ease'
+                                    }}
+                                >
+                                    {/* Panel Header */}
+                                    <div style={{ padding: 16 }}>
+                                        <div className="flex justify-between items-start">
+                                            <div style={{ flex: 1 }}>
+                                                <div style={{ 
+                                                    fontWeight: 600, 
+                                                    fontSize: 16,
+                                                    marginBottom: 4,
+                                                    display: 'flex',
+                                                    alignItems: 'center',
+                                                    gap: 8
+                                                }}>
+                                                    {isActive && (
+                                                        <span style={{ 
+                                                            color: 'var(--accent-green)',
+                                                            fontSize: 14
+                                                        }}>✓</span>
+                                                    )}
+                                                    {panel}
+                                                </div>
+                                                
+                                                {hasScans ? (
+                                                    <div style={{ 
+                                                        display: 'flex', 
+                                                        gap: 12, 
+                                                        fontSize: 13,
+                                                        marginTop: 8
+                                                    }}>
+                                                        <span style={{ color: 'var(--accent-green)' }}>
+                                                            ✓ {stats.saldiFound}
+                                                        </span>
+                                                        <span style={{ color: 'var(--accent-red)' }}>
+                                                            ✗ {stats.notSaldi}
+                                                        </span>
+                                                        {stats.eccedenze > 0 && (
+                                                            <span style={{ color: 'var(--accent-yellow)' }}>
+                                                                ⚠ {stats.eccedenze}
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                ) : (
+                                                    <div style={{ 
+                                                        fontSize: 12, 
+                                                        color: 'var(--text-muted)',
+                                                        marginTop: 4
+                                                    }}>
+                                                        Nessuna scansione
+                                                    </div>
+                                                )}
+                                            </div>
+                                            
+                                            {/* Actions */}
+                                            {!isActive && panels.length > 1 && (
+                                                <button 
+                                                    onClick={(e) => handleDelete(panel, e)}
+                                                    style={{
+                                                        padding: '6px 10px',
+                                                        background: 'transparent',
+                                                        border: '1px solid var(--accent-red)',
+                                                        borderRadius: 6,
+                                                        color: 'var(--accent-red)',
+                                                        fontSize: 12,
+                                                        cursor: 'pointer'
+                                                    }}
+                                                >
+                                                    🗑
+                                                </button>
+                                            )}
+                                        </div>
+                                    </div>
+                                    
+                                    {/* Progress Bar (if has scans and is saldo panel) */}
+                                    {hasScans && stats.uniqueCount > 0 && (
+                                        <div style={{
+                                            padding: '0 16px 16px',
+                                        }}>
+                                            <div style={{
+                                                display: 'flex',
+                                                justifyContent: 'space-between',
+                                                fontSize: 11,
+                                                color: 'var(--text-muted)',
+                                                marginBottom: 6
+                                            }}>
+                                                <span>{stats.uniqueCount} codici unici</span>
+                                                <span>{stats.complete} completi</span>
+                                            </div>
+                                            <div style={{
+                                                height: 4,
+                                                background: 'var(--bg-primary)',
+                                                borderRadius: 2,
+                                                overflow: 'hidden',
+                                                display: 'flex'
+                                            }}>
+                                                <div style={{
+                                                    width: `${(stats.complete / stats.uniqueCount) * 100}%`,
+                                                    background: 'var(--accent-green)',
+                                                    transition: 'width 0.3s ease'
+                                                }} />
+                                                <div style={{
+                                                    width: `${(stats.incomplete / stats.uniqueCount) * 100}%`,
+                                                    background: 'var(--accent-blue)',
+                                                    transition: 'width 0.3s ease'
+                                                }} />
+                                                <div style={{
+                                                    width: `${(stats.eccedenze / stats.uniqueCount) * 100}%`,
+                                                    background: 'var(--accent-yellow)',
+                                                    transition: 'width 0.3s ease'
+                                                }} />
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            );
+                        })}
+                    </div>
+                    
+                    {/* Footer hint */}
+                    <div style={{
+                        padding: 16,
+                        background: 'var(--bg-secondary)',
+                        borderTop: '1px solid var(--border-subtle)',
+                        textAlign: 'center',
+                        fontSize: 12,
+                        color: 'var(--text-muted)'
+                    }}>
+                        Tocca un pannello per selezionarlo
+                    </div>
+                </div>
+            );
+        }
+
+        // ============================================================
+        // MAIN APP
+        // ============================================================
+        
+        function App() {
+            const { view } = useApp();
+            
+            return (
+                <>
+                    <FeedbackOverlay />
+                    {view === 'home' && <HomeView />}
+                    {view === 'scanner' && <ScannerView />}
+                    {view === 'history' && <HistoryView />}
+                    {view === 'panels' && <PanelsView />}
+                </>
+            );
+        }
+
+        // ============================================================
+        // SERVICE WORKER REGISTRATION
+        // ============================================================
+        
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('./sw.js')
+                    .then((registration) => {
+                        console.log('[App] Service Worker registered:', registration.scope);
+                        
+                        // Check for updates
+                        registration.addEventListener('updatefound', () => {
+                            const newWorker = registration.installing;
+                            newWorker.addEventListener('statechange', () => {
+                                if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                                    // New version available
+                                    console.log('[App] New version available');
+                                    if (confirm('Nuova versione disponibile. Aggiornare?')) {
+                                        newWorker.postMessage({ type: 'SKIP_WAITING' });
+                                        window.location.reload();
+                                    }
+                                }
+                            });
+                        });
+                    })
+                    .catch((err) => {
+                        console.log('[App] Service Worker registration failed:', err);
+                    });
+            });
+        }
+
+        // ============================================================
+        // RENDER
+        // ============================================================
+        
+        function Root() {
+            return (
+                <AppProvider>
+                    <App />
+                </AppProvider>
+            );
+        }
+
+        ReactDOM.createRoot(document.getElementById('root')).render(<Root />);
+    </script>
+</body>
+</html>
