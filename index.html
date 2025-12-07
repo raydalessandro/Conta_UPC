@@ -1,0 +1,708 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="theme-color" content="#0d0d14">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <title>Saldi Scanner</title>
+    <link rel="manifest" href="manifest.json">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
+    
+    <!-- Barcode Detector Polyfill (il segreto del successo!) -->
+    <script type="module">
+        import "https://fastly.jsdelivr.net/npm/barcode-detector@3/dist/es/polyfill.min.js";
+    </script>
+    
+    <style>
+        :root {
+            --bg-primary: #0d0d14;
+            --bg-secondary: #16161f;
+            --bg-tertiary: #1e1e2a;
+            --text-primary: #ffffff;
+            --text-secondary: #b4b4b4;
+            --text-muted: #6b6b6b;
+            --accent-green: #00e676;
+            --accent-red: #ff5252;
+            --accent-yellow: #ffd740;
+            --accent-blue: #448aff;
+            --radius: 12px;
+        }
+        
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        
+        body {
+            font-family: 'Inter', -apple-system, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            min-height: 100vh;
+            min-height: 100dvh;
+            overflow: hidden;
+        }
+        
+        #app { 
+            height: 100vh; 
+            height: 100dvh; 
+            display: flex; 
+            flex-direction: column; 
+        }
+        
+        .mono { font-family: 'JetBrains Mono', monospace; }
+        
+        /* Buttons */
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            padding: 14px 24px;
+            border: none;
+            border-radius: var(--radius);
+            font-size: 15px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .btn-primary { background: var(--accent-green); color: #000; }
+        .btn-primary:active { transform: scale(0.97); }
+        .btn-secondary { background: var(--bg-tertiary); color: var(--text-primary); }
+        .btn-danger { background: rgba(255,82,82,0.15); color: var(--accent-red); }
+        .btn-sm { padding: 8px 14px; font-size: 13px; }
+        .btn-lg { padding: 18px 32px; font-size: 17px; }
+        .w-full { width: 100%; }
+        
+        /* Cards */
+        .card {
+            background: var(--bg-secondary);
+            border-radius: var(--radius);
+            padding: 20px;
+            margin-bottom: 12px;
+        }
+        
+        /* Scanner Styles */
+        #scanner-container {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            background: #000;
+        }
+        
+        #scanner-container video {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+        
+        .scan-overlay {
+            position: absolute;
+            inset: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            pointer-events: none;
+        }
+        
+        .scan-frame {
+            width: 85%;
+            max-width: 320px;
+            height: 120px;
+            border: 3px solid var(--accent-green);
+            border-radius: 16px;
+            box-shadow: 0 0 0 4000px rgba(0,0,0,0.5);
+            position: relative;
+        }
+        
+        .scan-line {
+            position: absolute;
+            top: 50%;
+            left: 10px;
+            right: 10px;
+            height: 2px;
+            background: var(--accent-green);
+            animation: scan 1.5s ease-in-out infinite;
+        }
+        
+        @keyframes scan {
+            0%, 100% { opacity: 1; transform: translateY(-20px); }
+            50% { opacity: 0.5; transform: translateY(20px); }
+        }
+        
+        /* Feedback Overlay */
+        .feedback-overlay {
+            position: fixed;
+            inset: 0;
+            z-index: 9999;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            pointer-events: none;
+            animation: fadeIn 0.15s ease;
+        }
+        
+        .feedback-overlay.success { background: rgba(0, 230, 118, 0.15); }
+        .feedback-overlay.error { background: rgba(255, 82, 82, 0.15); }
+        .feedback-overlay.warning { background: rgba(255, 215, 64, 0.15); }
+        
+        .feedback-box {
+            padding: 32px 48px;
+            background: var(--bg-secondary);
+            border-radius: 20px;
+            text-align: center;
+            box-shadow: 0 0 60px rgba(0,0,0,0.5);
+        }
+        
+        .feedback-overlay.success .feedback-box { border: 3px solid var(--accent-green); }
+        .feedback-overlay.error .feedback-box { border: 3px solid var(--accent-red); }
+        .feedback-overlay.warning .feedback-box { border: 3px solid var(--accent-yellow); }
+        
+        .feedback-message {
+            font-size: 24px;
+            font-weight: 700;
+            margin-bottom: 8px;
+        }
+        
+        .feedback-overlay.success .feedback-message { color: var(--accent-green); }
+        .feedback-overlay.error .feedback-message { color: var(--accent-red); }
+        .feedback-overlay.warning .feedback-message { color: var(--accent-yellow); }
+        
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        
+        /* Utility */
+        .flex { display: flex; }
+        .flex-col { flex-direction: column; }
+        .flex-1 { flex: 1; }
+        .items-center { align-items: center; }
+        .justify-between { justify-content: space-between; }
+        .justify-center { justify-content: center; }
+        .gap-2 { gap: 8px; }
+        .gap-4 { gap: 16px; }
+        .p-4 { padding: 16px; }
+        .p-5 { padding: 20px; }
+        .text-center { text-align: center; }
+        .overflow-auto { overflow: auto; }
+        .relative { position: relative; }
+    </style>
+</head>
+<body>
+    <div id="app"></div>
+    
+    <!-- React -->
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    
+    <!-- XLSX -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    
+    <script type="text/babel">
+        // Register Service Worker
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('./sw.js').catch(e => console.log('SW error:', e));
+        }
+
+        const { useState, useEffect, useRef, useCallback, createContext, useContext, useMemo } = React;
+
+        // ============================================================
+        // STORAGE
+        // ============================================================
+        const Storage = {
+            PREFIX: 'saldi_',
+            get(k, d = null) { try { const v = localStorage.getItem(this.PREFIX + k); return v ? JSON.parse(v) : d; } catch { return d; } },
+            set(k, v) { try { localStorage.setItem(this.PREFIX + k, JSON.stringify(v)); } catch {} }
+        };
+
+        // ============================================================
+        // CONTEXT
+        // ============================================================
+        const AppContext = createContext(null);
+        const useApp = () => useContext(AppContext);
+
+        function AppProvider({ children }) {
+            const [view, setView] = useState('home');
+            const [saldiList, setSaldiList] = useState(() => Storage.get('list', {}));
+            const [scans, setScans] = useState(() => Storage.get('scans', {}));
+            const [currentPanel, setCurrentPanel] = useState(() => Storage.get('panel', 'Pannello 1'));
+            const [panels, setPanels] = useState(() => Storage.get('panels', ['Pannello 1']));
+            const [feedback, setFeedback] = useState(null);
+
+            useEffect(() => { Storage.set('list', saldiList); }, [saldiList]);
+            useEffect(() => { Storage.set('scans', scans); }, [scans]);
+            useEffect(() => { Storage.set('panel', currentPanel); }, [currentPanel]);
+            useEffect(() => { Storage.set('panels', panels); }, [panels]);
+
+            const loadExcel = useCallback((file) => {
+                return new Promise((resolve, reject) => {
+                    const reader = new FileReader();
+                    reader.onload = (e) => {
+                        try {
+                            const wb = XLSX.read(new Uint8Array(e.target.result), { type: 'array' });
+                            const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1 });
+                            const list = {};
+                            rows.slice(1).forEach(row => {
+                                let upc = String(row[0] || '').replace(/[^0-9]/g, '');
+                                const qty = parseInt(row[1]) || 1;
+                                if (upc.length >= 8 && upc.length <= 14) {
+                                    upc = upc.padStart(13, '0');
+                                    list[upc] = (list[upc] || 0) + qty;
+                                }
+                            });
+                            if (!Object.keys(list).length) return reject(new Error('Nessun UPC valido'));
+                            setSaldiList(list);
+                            resolve({ count: Object.keys(list).length });
+                        } catch { reject(new Error('Errore lettura file')); }
+                    };
+                    reader.readAsArrayBuffer(file);
+                });
+            }, []);
+
+            const handleScan = useCallback((rawUpc) => {
+                let upc = String(rawUpc).replace(/[^0-9]/g, '').padStart(13, '0');
+                const upcAlt = upc.startsWith('0') ? upc.substring(1).padStart(13, '0') : '0' + upc;
+                
+                const isSaldo = upc in saldiList || upcAlt in saldiList;
+                const actualUpc = upc in saldiList ? upc : (upcAlt in saldiList ? upcAlt : upc);
+                const totalQty = saldiList[actualUpc] || 0;
+                const panelScans = scans[currentPanel] || [];
+                const prevCount = panelScans.filter(s => s.upc === actualUpc).length;
+
+                setScans(prev => ({
+                    ...prev,
+                    [currentPanel]: [...(prev[currentPanel] || []), { upc: actualUpc, timestamp: Date.now(), isSaldo, count: prevCount + 1, total: totalQty }]
+                }));
+
+                let type, message;
+                if (!isSaldo) { type = 'error'; message = 'NON IN SALDO'; }
+                else if (prevCount >= totalQty) { type = 'warning'; message = `ECCEDENZA ${prevCount + 1}/${totalQty}`; }
+                else { type = 'success'; message = `SALDO ${prevCount + 1}/${totalQty}`; }
+
+                setFeedback({ type, message, upc: actualUpc });
+                navigator.vibrate?.(type === 'success' ? [100] : type === 'warning' ? [100, 50, 100] : [200]);
+                setTimeout(() => setFeedback(null), 1500);
+            }, [saldiList, scans, currentPanel]);
+
+            const getStats = useCallback((panel = currentPanel) => {
+                const s = scans[panel] || [];
+                const saldi = s.filter(x => x.isSaldo);
+                const uniqueUPCs = [...new Set(saldi.map(x => x.upc))];
+                let eccedenze = 0;
+                uniqueUPCs.forEach(upc => { if (saldi.filter(x => x.upc === upc).length > (saldiList[upc] || 0)) eccedenze++; });
+                return { total: s.length, saldiFound: saldi.length, notSaldi: s.filter(x => !x.isSaldo).length, uniqueSaldi: uniqueUPCs.length, eccedenze };
+            }, [scans, saldiList, currentPanel]);
+
+            const clearAll = useCallback(() => { setSaldiList({}); setPanels(['Pannello 1']); setCurrentPanel('Pannello 1'); setScans({}); }, []);
+
+            const value = useMemo(() => ({
+                view, setView, saldiList, scans, currentPanel, setCurrentPanel, panels, setPanels, feedback, 
+                loadExcel, handleScan, getStats, clearAll, fileLoaded: Object.keys(saldiList).length > 0
+            }), [view, saldiList, scans, currentPanel, panels, feedback, loadExcel, handleScan, getStats, clearAll]);
+
+            return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
+        }
+
+        // ============================================================
+        // FEEDBACK OVERLAY
+        // ============================================================
+        function FeedbackOverlay() {
+            const { feedback } = useApp();
+            if (!feedback) return null;
+            return (
+                <div className={`feedback-overlay ${feedback.type}`}>
+                    <div className="feedback-box">
+                        <div className="feedback-message mono">{feedback.message}</div>
+                        <div className="mono" style={{ color: '#888', fontSize: 14 }}>{feedback.upc}</div>
+                    </div>
+                </div>
+            );
+        }
+
+        // ============================================================
+        // SCANNER (con BarcodeDetector polyfillato - FUNZIONA!)
+        // ============================================================
+        function ScannerView() {
+            const { setView, handleScan, scans, currentPanel, getStats } = useApp();
+            const stats = getStats();
+            const lastScan = scans[currentPanel]?.slice(-1)[0];
+            
+            const videoRef = useRef(null);
+            const streamRef = useRef(null);
+            const detectorRef = useRef(null);
+            const lastScanRef = useRef({ code: '', time: 0 });
+            const animationRef = useRef(null);
+            
+            const [status, setStatus] = useState('loading');
+            const [error, setError] = useState(null);
+            const [manualUpc, setManualUpc] = useState('');
+            
+            const DEBOUNCE = 1500;
+
+            useEffect(() => {
+                let mounted = true;
+
+                const init = async () => {
+                    try {
+                        // Aspetta che il polyfill sia caricato
+                        if (typeof BarcodeDetector === 'undefined') {
+                            await new Promise(r => setTimeout(r, 500));
+                            if (typeof BarcodeDetector === 'undefined') {
+                                throw new Error('BarcodeDetector non disponibile');
+                            }
+                        }
+
+                        // Crea il detector
+                        detectorRef.current = new BarcodeDetector({
+                            formats: ['ean_13', 'ean_8', 'upc_a', 'upc_e', 'code_128', 'code_39']
+                        });
+
+                        // Ottieni stream video
+                        const stream = await navigator.mediaDevices.getUserMedia({
+                            video: {
+                                facingMode: { ideal: 'environment' },
+                                width: { ideal: 1920 },
+                                height: { ideal: 1080 }
+                            },
+                            audio: false
+                        });
+
+                        if (!mounted) { stream.getTracks().forEach(t => t.stop()); return; }
+                        
+                        streamRef.current = stream;
+                        
+                        if (videoRef.current) {
+                            videoRef.current.srcObject = stream;
+                            await videoRef.current.play();
+                        }
+
+                        setStatus('scanning');
+
+                        // Loop di scansione
+                        const scanLoop = async () => {
+                            if (!mounted || !videoRef.current || !detectorRef.current) return;
+                            
+                            try {
+                                const barcodes = await detectorRef.current.detect(videoRef.current);
+                                
+                                if (barcodes.length > 0) {
+                                    const code = barcodes[0].rawValue;
+                                    const now = Date.now();
+                                    
+                                    if (now - lastScanRef.current.time >= DEBOUNCE || code !== lastScanRef.current.code) {
+                                        lastScanRef.current = { code, time: now };
+                                        handleScan(code);
+                                    }
+                                }
+                            } catch (e) {
+                                // Normale se non trova barcode
+                            }
+                            
+                            if (mounted) {
+                                animationRef.current = requestAnimationFrame(scanLoop);
+                            }
+                        };
+                        
+                        scanLoop();
+
+                    } catch (err) {
+                        if (mounted) {
+                            setStatus('error');
+                            setError(err.message || 'Errore camera');
+                        }
+                    }
+                };
+
+                init();
+
+                return () => {
+                    mounted = false;
+                    if (animationRef.current) cancelAnimationFrame(animationRef.current);
+                    if (streamRef.current) streamRef.current.getTracks().forEach(t => t.stop());
+                };
+            }, [handleScan]);
+
+            const handleManual = () => {
+                if (manualUpc.trim()) {
+                    handleScan(manualUpc.trim());
+                    setManualUpc('');
+                }
+            };
+
+            return (
+                <div className="flex flex-col flex-1" style={{ background: '#000' }}>
+                    {/* Header */}
+                    <div className="flex items-center justify-between p-4" style={{ background: 'var(--bg-secondary)' }}>
+                        <button className="btn btn-sm btn-secondary" onClick={() => setView('home')}>← Esci</button>
+                        <span style={{ fontSize: 13, color: '#888' }}>{currentPanel}</span>
+                        <div className="mono" style={{ fontSize: 14 }}>
+                            <span style={{ color: 'var(--accent-green)' }}>{stats.saldiFound}</span>
+                            <span style={{ color: '#555' }}> / </span>
+                            <span style={{ color: 'var(--accent-red)' }}>{stats.notSaldi}</span>
+                        </div>
+                    </div>
+
+                    {/* Scanner */}
+                    <div className="flex-1 relative" style={{ overflow: 'hidden' }}>
+                        <div id="scanner-container">
+                            <video ref={videoRef} playsInline autoPlay muted style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                            
+                            {status === 'scanning' && (
+                                <div className="scan-overlay">
+                                    <div className="scan-frame">
+                                        <div className="scan-line" />
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+
+                        {status === 'loading' && (
+                            <div className="flex flex-col items-center justify-center" style={{ position: 'absolute', inset: 0, background: 'var(--bg-primary)' }}>
+                                <div style={{ fontSize: 48, marginBottom: 16 }}>📷</div>
+                                <p style={{ color: '#888' }}>Avvio scanner...</p>
+                            </div>
+                        )}
+
+                        {status === 'error' && (
+                            <div className="flex flex-col items-center justify-center p-5 text-center" style={{ position: 'absolute', inset: 0, background: 'var(--bg-primary)' }}>
+                                <div style={{ fontSize: 48, marginBottom: 16 }}>⚠️</div>
+                                <p style={{ color: 'var(--accent-red)', marginBottom: 16 }}>{error}</p>
+                                <button className="btn btn-primary" onClick={() => location.reload()}>🔄 Ricarica</button>
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Manual Input */}
+                    <div className="flex gap-2 p-4" style={{ background: 'var(--bg-secondary)' }}>
+                        <input
+                            type="tel"
+                            placeholder="UPC manuale..."
+                            value={manualUpc}
+                            onChange={e => setManualUpc(e.target.value)}
+                            onKeyDown={e => e.key === 'Enter' && handleManual()}
+                            className="mono"
+                            style={{ flex: 1, padding: 12, borderRadius: 'var(--radius)', border: '1px solid #333', background: 'var(--bg-tertiary)', color: '#fff', fontSize: 16 }}
+                        />
+                        <button className="btn btn-primary" onClick={handleManual} disabled={!manualUpc.trim()}>✓</button>
+                    </div>
+
+                    {/* Last Scan */}
+                    {lastScan && (
+                        <div className="flex items-center justify-between p-4" style={{
+                            background: lastScan.isSaldo ? 'rgba(0,230,118,0.1)' : 'rgba(255,82,82,0.1)',
+                            borderTop: `2px solid ${lastScan.isSaldo ? 'var(--accent-green)' : 'var(--accent-red)'}`
+                        }}>
+                            <div>
+                                <div className="mono" style={{ fontSize: 16, fontWeight: 600, color: lastScan.isSaldo ? 'var(--accent-green)' : 'var(--accent-red)' }}>
+                                    {lastScan.upc}
+                                </div>
+                                <div style={{ fontSize: 12, color: '#888' }}>{lastScan.isSaldo ? '✓ Saldo' : '✗ No saldo'}</div>
+                            </div>
+                            {lastScan.isSaldo && (
+                                <div className="mono" style={{
+                                    padding: '8px 14px', borderRadius: 8, fontWeight: 700,
+                                    background: lastScan.count > lastScan.total ? 'var(--accent-yellow)' : 'var(--accent-green)',
+                                    color: '#000'
+                                }}>
+                                    {lastScan.count}/{lastScan.total}
+                                </div>
+                            )}
+                        </div>
+                    )}
+                </div>
+            );
+        }
+
+        // ============================================================
+        // HOME
+        // ============================================================
+        function HomeView() {
+            const { setView, saldiList, loadExcel, clearAll, getStats, currentPanel, panels, setCurrentPanel, setPanels, fileLoaded } = useApp();
+            const stats = getStats();
+            const fileRef = useRef(null);
+            const [uploading, setUploading] = useState(false);
+
+            const handleFile = async (e) => {
+                const file = e.target.files?.[0];
+                if (!file) return;
+                setUploading(true);
+                try {
+                    const r = await loadExcel(file);
+                    alert(`✓ Caricati ${r.count} codici`);
+                } catch (err) {
+                    alert('❌ ' + err.message);
+                } finally {
+                    setUploading(false);
+                    e.target.value = '';
+                }
+            };
+
+            const addPanel = () => {
+                const name = prompt('Nome pannello:');
+                if (name?.trim() && !panels.includes(name.trim())) {
+                    setPanels([...panels, name.trim()]);
+                    setCurrentPanel(name.trim());
+                }
+            };
+
+            return (
+                <div className="flex flex-col flex-1 overflow-auto p-5">
+                    {/* Header */}
+                    <header className="text-center" style={{ padding: '24px 0' }}>
+                        <h1 style={{ fontSize: 32, fontWeight: 700, background: 'linear-gradient(135deg, var(--accent-green), var(--accent-blue))', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
+                            SALDI SCANNER
+                        </h1>
+                        <p style={{ color: '#888', fontSize: 14, marginTop: 6 }}>Scansiona • Verifica • Organizza</p>
+                    </header>
+
+                    {/* Panel */}
+                    <div className="card flex items-center justify-between" style={{ cursor: 'pointer' }} onClick={addPanel}>
+                        <span>📋 {currentPanel}</span>
+                        <span style={{ color: '#888', fontSize: 13 }}>+ Nuovo</span>
+                    </div>
+
+                    {panels.length > 1 && (
+                        <div className="flex gap-2" style={{ marginBottom: 12, overflowX: 'auto', paddingBottom: 4 }}>
+                            {panels.map(p => (
+                                <button key={p} onClick={() => setCurrentPanel(p)} style={{
+                                    padding: '8px 16px', borderRadius: 20, border: `1px solid ${p === currentPanel ? 'var(--accent-green)' : '#333'}`,
+                                    background: p === currentPanel ? 'rgba(0,230,118,0.1)' : 'transparent',
+                                    color: p === currentPanel ? 'var(--accent-green)' : '#888', fontSize: 13, cursor: 'pointer', whiteSpace: 'nowrap'
+                                }}>
+                                    {p}
+                                </button>
+                            ))}
+                        </div>
+                    )}
+
+                    {/* Stats */}
+                    <div className="card">
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 16 }}>
+                            <div className="text-center">
+                                <div className="mono" style={{ fontSize: 28, fontWeight: 700, color: 'var(--accent-blue)' }}>{Object.keys(saldiList).length}</div>
+                                <div style={{ fontSize: 11, color: '#888' }}>LISTA SALDI</div>
+                            </div>
+                            <div className="text-center">
+                                <div className="mono" style={{ fontSize: 28, fontWeight: 700 }}>{stats.total}</div>
+                                <div style={{ fontSize: 11, color: '#888' }}>SCANSIONATI</div>
+                            </div>
+                            <div className="text-center">
+                                <div className="mono" style={{ fontSize: 28, fontWeight: 700, color: 'var(--accent-green)' }}>{stats.saldiFound}</div>
+                                <div style={{ fontSize: 11, color: '#888' }}>TROVATI</div>
+                            </div>
+                            <div className="text-center">
+                                <div className="mono" style={{ fontSize: 28, fontWeight: 700, color: 'var(--accent-red)' }}>{stats.notSaldi}</div>
+                                <div style={{ fontSize: 11, color: '#888' }}>NO SALDI</div>
+                            </div>
+                        </div>
+                        {stats.eccedenze > 0 && (
+                            <div style={{ marginTop: 12, padding: 10, background: 'rgba(255,215,64,0.1)', borderRadius: 8, color: 'var(--accent-yellow)', fontSize: 13, textAlign: 'center' }}>
+                                ⚠️ {stats.eccedenze} eccedenze
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Upload */}
+                    <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv" onChange={handleFile} style={{ display: 'none' }} />
+                    <button className={`btn w-full ${fileLoaded ? 'btn-secondary' : 'btn-primary'}`} onClick={() => fileRef.current?.click()} disabled={uploading}>
+                        {uploading ? '⏳ Caricamento...' : `📁 ${fileLoaded ? 'Ricarica' : 'Carica'} Lista Excel`}
+                    </button>
+
+                    {/* Scanner */}
+                    {fileLoaded && (
+                        <button className="btn btn-primary btn-lg w-full" style={{ marginTop: 12 }} onClick={() => setView('scanner')}>
+                            📷 AVVIA SCANNER
+                        </button>
+                    )}
+
+                    {/* History */}
+                    {stats.total > 0 && (
+                        <button className="btn btn-secondary w-full" style={{ marginTop: 12 }} onClick={() => setView('history')}>
+                            📜 Storico ({stats.total})
+                        </button>
+                    )}
+
+                    <div style={{ flex: 1 }} />
+
+                    {/* Reset */}
+                    <button className="btn btn-danger btn-sm w-full" style={{ marginTop: 20, opacity: 0.7 }} onClick={() => confirm('Reset tutto?') && clearAll()}>
+                        🗑 Reset
+                    </button>
+                </div>
+            );
+        }
+
+        // ============================================================
+        // HISTORY
+        // ============================================================
+        function HistoryView() {
+            const { setView, scans, currentPanel, saldiList } = useApp();
+            const panelScans = scans[currentPanel] || [];
+            
+            const summary = useMemo(() => {
+                const grouped = {};
+                panelScans.forEach(s => {
+                    if (!grouped[s.upc]) grouped[s.upc] = { upc: s.upc, count: 0, total: saldiList[s.upc] || 0, isSaldo: s.isSaldo, time: s.timestamp };
+                    grouped[s.upc].count++;
+                    grouped[s.upc].time = Math.max(grouped[s.upc].time, s.timestamp);
+                });
+                return Object.values(grouped).sort((a, b) => b.time - a.time);
+            }, [panelScans, saldiList]);
+
+            return (
+                <div className="flex flex-col flex-1">
+                    <div className="flex items-center justify-between p-4" style={{ background: 'var(--bg-secondary)', borderBottom: '1px solid #222' }}>
+                        <button className="btn btn-sm btn-secondary" onClick={() => setView('home')}>← Indietro</button>
+                        <span style={{ fontWeight: 600 }}>📜 {currentPanel}</span>
+                        <div style={{ width: 80 }} />
+                    </div>
+                    
+                    <div className="flex-1 overflow-auto p-4">
+                        {summary.length === 0 ? (
+                            <div className="text-center" style={{ padding: 40, color: '#888' }}>Nessuna scansione</div>
+                        ) : summary.map(item => (
+                            <div key={item.upc} style={{
+                                padding: 14, background: 'var(--bg-secondary)', borderRadius: 10, marginBottom: 10,
+                                borderLeft: `4px solid ${!item.isSaldo ? 'var(--accent-red)' : item.count > item.total ? 'var(--accent-yellow)' : 'var(--accent-green)'}`
+                            }}>
+                                <div className="flex items-center justify-between">
+                                    <div className="mono" style={{ fontSize: 14 }}>{item.upc}</div>
+                                    {item.isSaldo ? (
+                                        <div className="mono" style={{
+                                            padding: '4px 10px', borderRadius: 6, fontSize: 13, fontWeight: 600,
+                                            background: item.count > item.total ? 'rgba(255,215,64,0.2)' : 'rgba(0,230,118,0.2)',
+                                            color: item.count > item.total ? 'var(--accent-yellow)' : 'var(--accent-green)'
+                                        }}>{item.count}/{item.total}</div>
+                                    ) : (
+                                        <div style={{ padding: '4px 10px', background: 'rgba(255,82,82,0.2)', color: 'var(--accent-red)', borderRadius: 6, fontSize: 11 }}>NO</div>
+                                    )}
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            );
+        }
+
+        // ============================================================
+        // APP
+        // ============================================================
+        function App() {
+            const { view } = useApp();
+            return (
+                <>
+                    <FeedbackOverlay />
+                    {view === 'home' && <HomeView />}
+                    {view === 'scanner' && <ScannerView />}
+                    {view === 'history' && <HistoryView />}
+                </>
+            );
+        }
+
+        // ============================================================
+        // RENDER
+        // ============================================================
+        ReactDOM.createRoot(document.getElementById('app')).render(
+            <AppProvider><App /></AppProvider>
+        );
+    </script>
+</body>
+</html>

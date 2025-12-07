@@ -1,0 +1,27 @@
+{
+    "name": "Saldi Scanner",
+    "short_name": "SaldiScan",
+    "description": "Scanner barcode per verifica saldi occhiali",
+    "start_url": "./index.html",
+    "scope": "./",
+    "display": "standalone",
+    "orientation": "portrait",
+    "theme_color": "#0d0d14",
+    "background_color": "#0d0d14",
+    "lang": "it-IT",
+    "icons": [
+        {
+            "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect fill='%230d0d14' width='100' height='100' rx='20'/><text x='50' y='65' text-anchor='middle' font-size='50'>📷</text></svg>",
+            "sizes": "any",
+            "type": "image/svg+xml",
+            "purpose": "any"
+        },
+        {
+            "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect fill='%2300e676' width='100' height='100' rx='20'/><text x='50' y='65' text-anchor='middle' font-size='50'>📷</text></svg>",
+            "sizes": "any",
+            "type": "image/svg+xml",
+            "purpose": "maskable"
+        }
+    ],
+    "categories": ["business", "productivity", "utilities"]
+}
