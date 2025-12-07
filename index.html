@@ -208,9 +208,122 @@
         // STORAGE
         // ============================================================
         const Storage = {
-            PREFIX: 'saldi_',
+            PREFIX: 'saldi_scanner_',
             get(k, d = null) { try { const v = localStorage.getItem(this.PREFIX + k); return v ? JSON.parse(v) : d; } catch { return d; } },
-            set(k, v) { try { localStorage.setItem(this.PREFIX + k, JSON.stringify(v)); } catch {} }
+            set(k, v) { try { localStorage.setItem(this.PREFIX + k, JSON.stringify(v)); } catch {} },
+            remove(k) { try { localStorage.removeItem(this.PREFIX + k); } catch {} }
+        };
+
+        // UPC helpers: try multiple normalizations to catch faded / legacy codes
+        const normalizeUpcCandidates = (raw) => {
+            const digits = String(raw || '').replace(/[^0-9]/g, '');
+            if (!digits) return [];
+            if (digits.length < 10 || digits.length > 14) return [];
+            const set = new Set();
+            const pad13 = digits.padStart(13, '0').slice(-13);
+            set.add(pad13);
+            if (digits.length === 12) set.add(('0' + digits).slice(-13));
+            if (digits.length === 13 && digits.startsWith('0')) set.add(digits.substring(1).padStart(13, '0'));
+            if (digits.length === 8) set.add(digits.padStart(13, '0'));
+            return Array.from(set);
+        };
+
+        // Corporate parser helpers (from provided standalone tool)
+        const readCorporateExcel = (file) => new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                try {
+                    const data = new Uint8Array(e.target.result);
+                    const workbook = XLSX.read(data, { type: 'array' });
+                    const sheet = workbook.Sheets[workbook.SheetNames[0]];
+                    const json = XLSX.utils.sheet_to_json(sheet, { defval: '' });
+                    resolve(json);
+                } catch (err) {
+                    reject(new Error('Errore lettura file Excel: ' + err.message));
+                }
+            };
+            reader.onerror = () => reject(new Error('Errore lettura file'));
+            reader.readAsArrayBuffer(file);
+        });
+
+        const extractStores = (data) => {
+            const storesMap = {};
+            data.forEach(row => {
+                const code = row['CODICE SAP'];
+                const name = row['NOME NEGOZIO'];
+                if (code && name) {
+                    if (!storesMap[code]) storesMap[code] = { code, name, count: 0 };
+                    storesMap[code].count++;
+                }
+            });
+            return Object.values(storesMap).sort((a, b) => a.code.localeCompare(b.code));
+        };
+
+        const extractStoreArticles = (data, storeCode) => {
+            const articlesMap = {};
+            data.forEach(row => {
+                if (row['CODICE SAP'] !== storeCode) return;
+
+                let upc = String(row['UPC'] || '').replace(/[^0-9]/g, '');
+                if (upc.length < 8 || upc.length > 14) return;
+                upc = upc.padStart(13, '0');
+
+                const qty = parseInt(row['On-Hand Units']) || 1;
+
+                let modello = String(row['MODELLO'] || '').trim();
+                if (modello.startsWith('0')) modello = modello.substring(1);
+
+                const brand = String(row['BRAND'] || '').trim();
+
+                let sconto = row['SALDI ESTIVI 2025'];
+                if (typeof sconto === 'string' && sconto.includes('70')) {
+                    sconto = 70;
+                } else if (typeof sconto === 'number') {
+                    sconto = Math.round(sconto * 100);
+                } else {
+                    sconto = 30;
+                }
+
+                const prezzoOrig = parseFloat(row['PREZZO AS IS']) || 0;
+                const prezzoSaldo = parseFloat(row['PREZZO TO BE']) || 0;
+
+                if (articlesMap[upc]) {
+                    articlesMap[upc].qty += qty;
+                } else {
+                    articlesMap[upc] = {
+                        upc,
+                        qty,
+                        modello,
+                        brand,
+                        sconto,
+                        prezzoOrig: Math.round(prezzoOrig * 100) / 100,
+                        prezzoSaldo: Math.round(prezzoSaldo * 100) / 100
+                    };
+                }
+            });
+            return Object.values(articlesMap);
+        };
+
+        const buildCorporatePayload = (storeArticles, store) => {
+            const saldiMap = {};
+            const discountCount = {};
+            let totalQty = 0;
+            storeArticles.forEach(a => {
+                saldiMap[a.upc] = a.qty;
+                totalQty += a.qty;
+                discountCount[a.sconto] = (discountCount[a.sconto] || 0) + 1;
+            });
+            return {
+                saldiMap,
+                meta: {
+                    store,
+                    loadedAt: new Date().toISOString(),
+                    totalModels: storeArticles.length,
+                    totalQty,
+                    discountCount
+                },
+                articles: storeArticles
+            };
         };
 
         // ============================================================
@@ -226,51 +339,40 @@
             const [currentPanel, setCurrentPanel] = useState(() => Storage.get('panel', 'Pannello 1'));
             const [panels, setPanels] = useState(() => Storage.get('panels', ['Pannello 1']));
             const [feedback, setFeedback] = useState(null);
+            const [meta, setMeta] = useState(() => Storage.get('meta', null));
+            const [storeArticles, setStoreArticles] = useState(() => Storage.get('store_articles', []));
 
             useEffect(() => { Storage.set('list', saldiList); }, [saldiList]);
             useEffect(() => { Storage.set('scans', scans); }, [scans]);
             useEffect(() => { Storage.set('panel', currentPanel); }, [currentPanel]);
             useEffect(() => { Storage.set('panels', panels); }, [panels]);
+            useEffect(() => { Storage.set('meta', meta); }, [meta]);
+            useEffect(() => { Storage.set('store_articles', storeArticles); }, [storeArticles]);
 
-            const loadExcel = useCallback((file) => {
-                return new Promise((resolve, reject) => {
-                    const reader = new FileReader();
-                    reader.onload = (e) => {
-                        try {
-                            const wb = XLSX.read(new Uint8Array(e.target.result), { type: 'array' });
-                            const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1 });
-                            const list = {};
-                            rows.slice(1).forEach(row => {
-                                let upc = String(row[0] || '').replace(/[^0-9]/g, '');
-                                const qty = parseInt(row[1]) || 1;
-                                if (upc.length >= 8 && upc.length <= 14) {
-                                    upc = upc.padStart(13, '0');
-                                    list[upc] = (list[upc] || 0) + qty;
-                                }
-                            });
-                            if (!Object.keys(list).length) return reject(new Error('Nessun UPC valido'));
-                            setSaldiList(list);
-                            resolve({ count: Object.keys(list).length });
-                        } catch { reject(new Error('Errore lettura file')); }
-                    };
-                    reader.readAsArrayBuffer(file);
-                });
+            const applyCorporateData = useCallback(({ saldiMap, meta, articles }) => {
+                setSaldiList(saldiMap);
+                setMeta(meta);
+                setStoreArticles(articles);
+                setScans({});
+                setPanels(['Pannello 1']);
+                setCurrentPanel('Pannello 1');
             }, []);
 
             const handleScan = useCallback((rawUpc) => {
-                let upc = String(rawUpc).replace(/[^0-9]/g, '').padStart(13, '0');
-                const upcAlt = upc.startsWith('0') ? upc.substring(1).padStart(13, '0') : '0' + upc;
-                
-                const isSaldo = upc in saldiList || upcAlt in saldiList;
-                const actualUpc = upc in saldiList ? upc : (upcAlt in saldiList ? upcAlt : upc);
-                const totalQty = saldiList[actualUpc] || 0;
+                const candidates = normalizeUpcCandidates(rawUpc);
+                if (!candidates.length) return;
+                const actualUpc = candidates.find(c => c in saldiList) || candidates[0];
+                const isSaldo = Boolean(actualUpc && actualUpc in saldiList);
+                const totalQty = isSaldo ? saldiList[actualUpc] : 0;
                 const panelScans = scans[currentPanel] || [];
                 const prevCount = panelScans.filter(s => s.upc === actualUpc).length;
 
-                setScans(prev => ({
-                    ...prev,
-                    [currentPanel]: [...(prev[currentPanel] || []), { upc: actualUpc, timestamp: Date.now(), isSaldo, count: prevCount + 1, total: totalQty }]
-                }));
+                setScans(prev => {
+                    const current = [...(prev[currentPanel] || []), { upc: actualUpc, timestamp: Date.now(), isSaldo, count: prevCount + 1, total: totalQty }];
+                    const MAX_HISTORY = 5000;
+                    const trimmed = current.length > MAX_HISTORY ? current.slice(current.length - MAX_HISTORY) : current;
+                    return { ...prev, [currentPanel]: trimmed };
+                });
 
                 let type, message;
                 if (!isSaldo) { type = 'error'; message = 'NON IN SALDO'; }
@@ -291,12 +393,21 @@
                 return { total: s.length, saldiFound: saldi.length, notSaldi: s.filter(x => !x.isSaldo).length, uniqueSaldi: uniqueUPCs.length, eccedenze };
             }, [scans, saldiList, currentPanel]);
 
-            const clearAll = useCallback(() => { setSaldiList({}); setPanels(['Pannello 1']); setCurrentPanel('Pannello 1'); setScans({}); }, []);
+            const clearAll = useCallback(() => {
+                setSaldiList({});
+                setPanels(['Pannello 1']);
+                setCurrentPanel('Pannello 1');
+                setScans({});
+                setMeta(null);
+                setStoreArticles([]);
+                Storage.remove('meta');
+                Storage.remove('store_articles');
+            }, []);
 
             const value = useMemo(() => ({
                 view, setView, saldiList, scans, currentPanel, setCurrentPanel, panels, setPanels, feedback, 
-                loadExcel, handleScan, getStats, clearAll, fileLoaded: Object.keys(saldiList).length > 0
-            }), [view, saldiList, scans, currentPanel, panels, feedback, loadExcel, handleScan, getStats, clearAll]);
+                handleScan, getStats, clearAll, fileLoaded: Object.keys(saldiList).length > 0, meta, storeArticles, applyCorporateData
+            }), [view, saldiList, scans, currentPanel, panels, feedback, handleScan, getStats, clearAll, meta, storeArticles, applyCorporateData]);
 
             return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
         }
@@ -335,7 +446,7 @@
             const [error, setError] = useState(null);
             const [manualUpc, setManualUpc] = useState('');
             
-            const DEBOUNCE = 1500;
+            const DEBOUNCE = 700; // 0.7s safety gap to avoid duplicates in burst scans
 
             useEffect(() => {
                 let mounted = true;
@@ -355,8 +466,19 @@
                             formats: ['ean_13', 'ean_8', 'upc_a', 'upc_e', 'code_128', 'code_39']
                         });
 
-                        // Ottieni stream video
-                        const stream = await navigator.mediaDevices.getUserMedia({
+                        // Ottieni stream video con fallback legacy
+                        const legacyGetUserMedia = navigator.getUserMedia || navigator.webkitGetUserMedia || navigator.mozGetUserMedia;
+                        const getStream = navigator.mediaDevices?.getUserMedia
+                            ? (constraints) => navigator.mediaDevices.getUserMedia(constraints)
+                            : (legacyGetUserMedia
+                                ? (constraints) => new Promise((resolve, reject) => legacyGetUserMedia.call(navigator, constraints, resolve, reject))
+                                : null);
+
+                        if (!getStream) {
+                            throw new Error('Camera non disponibile: usa HTTPS/localhost e consenti i permessi.');
+                        }
+
+                        const stream = await getStream({
                             video: {
                                 facingMode: { ideal: 'environment' },
                                 width: { ideal: 1920 },
@@ -421,10 +543,14 @@
             }, [handleScan]);
 
             const handleManual = () => {
-                if (manualUpc.trim()) {
-                    handleScan(manualUpc.trim());
-                    setManualUpc('');
+                const digits = manualUpc.replace(/[^0-9]/g, '');
+                if (!digits) return;
+                if (digits.length < 10 || digits.length > 14) {
+                    alert('Inserisci un UPC tra 10 e 14 cifre');
+                    return;
                 }
+                handleScan(manualUpc.trim());
+                setManualUpc('');
             };
 
             return (
@@ -474,6 +600,10 @@
                     <div className="flex gap-2 p-4" style={{ background: 'var(--bg-secondary)' }}>
                         <input
                             type="tel"
+                            inputMode="numeric"
+                            pattern="[0-9]*"
+                            minLength={10}
+                            maxLength={14}
                             placeholder="UPC manuale..."
                             value={manualUpc}
                             onChange={e => setManualUpc(e.target.value)}
@@ -515,25 +645,8 @@
         // HOME
         // ============================================================
         function HomeView() {
-            const { setView, saldiList, loadExcel, clearAll, getStats, currentPanel, panels, setCurrentPanel, setPanels, fileLoaded } = useApp();
+            const { setView, saldiList, clearAll, getStats, currentPanel, panels, setCurrentPanel, setPanels, fileLoaded, meta } = useApp();
             const stats = getStats();
-            const fileRef = useRef(null);
-            const [uploading, setUploading] = useState(false);
-
-            const handleFile = async (e) => {
-                const file = e.target.files?.[0];
-                if (!file) return;
-                setUploading(true);
-                try {
-                    const r = await loadExcel(file);
-                    alert(`✓ Caricati ${r.count} codici`);
-                } catch (err) {
-                    alert('❌ ' + err.message);
-                } finally {
-                    setUploading(false);
-                    e.target.value = '';
-                }
-            };
 
             const addPanel = () => {
                 const name = prompt('Nome pannello:');
@@ -593,6 +706,12 @@
                                 <div style={{ fontSize: 11, color: '#888' }}>NO SALDI</div>
                             </div>
                         </div>
+                        {meta && (
+                            <div style={{ marginTop: 12, padding: 10, background: 'rgba(68,138,255,0.1)', borderRadius: 8, color: 'var(--accent-blue)', fontSize: 13 }}>
+                                Negozio: {meta.store?.code} · {meta.store?.name}<br />
+                                Modelli: {meta.totalModels} • Pezzi: {meta.totalQty}
+                            </div>
+                        )}
                         {stats.eccedenze > 0 && (
                             <div style={{ marginTop: 12, padding: 10, background: 'rgba(255,215,64,0.1)', borderRadius: 8, color: 'var(--accent-yellow)', fontSize: 13, textAlign: 'center' }}>
                                 ⚠️ {stats.eccedenze} eccedenze
@@ -600,15 +719,14 @@
                         )}
                     </div>
 
-                    {/* Upload */}
-                    <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv" onChange={handleFile} style={{ display: 'none' }} />
-                    <button className={`btn w-full ${fileLoaded ? 'btn-secondary' : 'btn-primary'}`} onClick={() => fileRef.current?.click()} disabled={uploading}>
-                        {uploading ? '⏳ Caricamento...' : `📁 ${fileLoaded ? 'Ricarica' : 'Carica'} Lista Excel`}
+                    {/* Upload (corporate parser flow) */}
+                    <button data-testid="open-loader" className="btn w-full btn-primary" onClick={() => setView('loader')}>
+                        📁 Carica File Corporate
                     </button>
 
                     {/* Scanner */}
                     {fileLoaded && (
-                        <button className="btn btn-primary btn-lg w-full" style={{ marginTop: 12 }} onClick={() => setView('scanner')}>
+                        <button data-testid="start-scanner" className="btn btn-primary btn-lg w-full" style={{ marginTop: 12 }} onClick={() => setView('scanner')}>
                             📷 AVVIA SCANNER
                         </button>
                     )}
@@ -683,6 +801,156 @@
         }
 
         // ============================================================
+        // CORPORATE LOADER (multi-step parser)
+        // ============================================================
+        function CorporateLoader() {
+            const { setView, applyCorporateData } = useApp();
+            const [step, setStep] = useState(1);
+            const [loadingStatus, setLoadingStatus] = useState('');
+            const [error, setError] = useState('');
+            const [stores, setStores] = useState([]);
+            const [rawData, setRawData] = useState([]);
+            const [selectedStore, setSelectedStore] = useState(null);
+            const [storeArticles, setStoreArticles] = useState([]);
+            const [search, setSearch] = useState('');
+
+            const goHome = () => setView('home');
+
+            const onFile = async (e) => {
+                const file = e.target.files?.[0];
+                if (!file) return;
+                setError('');
+                setStep(2);
+                setLoadingStatus('Lettura file...');
+                try {
+                    const data = await readCorporateExcel(file);
+                    setRawData(data);
+                    setLoadingStatus('Estrazione negozi...');
+                    const list = extractStores(data);
+                    if (!list.length) throw new Error('Nessun negozio trovato nel file');
+                    setStores(list);
+                    setStep(3);
+                } catch (err) {
+                    setError(err.message || 'Errore file');
+                    setStep(1);
+                } finally {
+                    e.target.value = '';
+                }
+            };
+
+            const chooseStore = (store) => {
+                setSelectedStore(store);
+                const articles = extractStoreArticles(rawData, store.code);
+                setStoreArticles(articles);
+                setStep(4);
+            };
+
+            const confirmStore = () => {
+                if (!selectedStore || !storeArticles.length) return;
+                const payload = buildCorporatePayload(storeArticles, selectedStore);
+                applyCorporateData(payload);
+                setView('home');
+            };
+
+            const filteredStores = stores.filter(s => s.code.toLowerCase().includes(search.toLowerCase()) || s.name.toLowerCase().includes(search.toLowerCase()));
+
+            return (
+                <div className="flex flex-col flex-1 overflow-auto">
+                    <div className="flex items-center justify-between p-4" style={{ background: 'var(--bg-secondary)', borderBottom: '1px solid #222' }}>
+                        <button className="btn btn-sm btn-secondary" onClick={goHome}>← Home</button>
+                        <span style={{ fontWeight: 600 }}>Carica corporate</span>
+                        <div style={{ width: 80 }} />
+                    </div>
+
+                    <div className="p-5 flex-1">
+                        {step === 1 && (
+                            <div className="card">
+                                <div style={{ fontWeight: 600, marginBottom: 8 }}>📁 Carica File Excel</div>
+                                <p style={{ color: '#888', fontSize: 14, marginBottom: 16 }}>Seleziona il file corporate (non modificato).</p>
+                                <input data-testid="file-input" type="file" accept=".xlsx,.xls" onChange={onFile} style={{ display: 'none' }} id="corporate-file" />
+                                <button className="btn btn-primary w-full" onClick={() => document.getElementById('corporate-file').click()}>Seleziona File</button>
+                                {error && <div style={{ marginTop: 12, padding: 12, borderRadius: 8, background: 'rgba(255,82,82,0.1)', color: 'var(--accent-red)', fontSize: 13 }}>{error}</div>}
+                            </div>
+                        )}
+
+                        {step === 2 && (
+                            <div className="card text-center">
+                                <div style={{ fontSize: 40, marginBottom: 12 }}>⏳</div>
+                                <div>Analisi file in corso...</div>
+                                <div style={{ color: '#888', fontSize: 12, marginTop: 6 }}>{loadingStatus}</div>
+                            </div>
+                        )}
+
+                        {step === 3 && (
+                            <div className="card">
+                                <div style={{ fontWeight: 600, marginBottom: 12 }}>🏪 Seleziona il tuo Negozio</div>
+                                <input
+                                    value={search}
+                                    onChange={e => setSearch(e.target.value)}
+                                    placeholder="🔍 Cerca per nome o codice..."
+                                    style={{ width: '100%', padding: 12, borderRadius: 'var(--radius)', border: '1px solid #333', background: 'var(--bg-tertiary)', color: '#fff', marginBottom: 12 }}
+                                />
+                                <div style={{ maxHeight: 360, overflow: 'auto', display: 'flex', flexDirection: 'column', gap: 8 }}>
+                                    {filteredStores.map(s => (
+                                        <div key={s.code} onClick={() => chooseStore(s)} style={{
+                                            padding: 12, borderRadius: 10, background: 'var(--bg-tertiary)', cursor: 'pointer',
+                                            border: selectedStore?.code === s.code ? '2px solid var(--accent-green)' : '2px solid transparent'
+                                        }}>
+                                            <div style={{ color: 'var(--accent-blue)', fontWeight: 700 }}>{s.code}</div>
+                                            <div>{s.name}</div>
+                                            <div style={{ color: '#888', fontSize: 12 }}>{s.count} articoli</div>
+                                        </div>
+                                    ))}
+                                    {!filteredStores.length && <div style={{ color: '#888', fontSize: 13 }}>Nessun negozio trovato</div>}
+                                </div>
+                            </div>
+                        )}
+
+                        {step === 4 && (
+                            <div className="card">
+                                <div style={{ fontWeight: 600, marginBottom: 8 }}>📋 Riepilogo</div>
+                                <div style={{ fontSize: 16, marginBottom: 8 }}>{selectedStore.code} - {selectedStore.name}</div>
+                                <div className="summary-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 12, marginBottom: 12 }}>
+                                    <div className="summary-item" style={{ background: 'var(--bg-tertiary)', borderRadius: 10, padding: 12, textAlign: 'center' }}>
+                                        <div className="summary-value" style={{ color: 'var(--accent-blue)' }}>{storeArticles.length}</div>
+                                        <div className="summary-label" style={{ color: '#888', fontSize: 11 }}>Modelli unici</div>
+                                    </div>
+                                    <div className="summary-item" style={{ background: 'var(--bg-tertiary)', borderRadius: 10, padding: 12, textAlign: 'center' }}>
+                                        <div className="summary-value">{storeArticles.reduce((s, a) => s + a.qty, 0)}</div>
+                                        <div className="summary-label" style={{ color: '#888', fontSize: 11 }}>Pezzi totali</div>
+                                    </div>
+                                </div>
+                                <div style={{ fontSize: 14, color: '#888', marginBottom: 8 }}>Anteprima articoli:</div>
+                                <div style={{ maxHeight: 240, overflow: 'auto', display: 'flex', flexDirection: 'column', gap: 8 }}>
+                                    {storeArticles.slice(0, 20).map(a => (
+                                        <div key={a.upc} style={{ display: 'flex', justifyContent: 'space-between', background: 'var(--bg-tertiary)', borderRadius: 8, padding: 10 }}>
+                                            <div>
+                                                <div style={{ fontWeight: 600 }}>{a.brand} <span style={{ color: '#888', fontSize: 12 }}>×{a.qty}</span></div>
+                                                <div style={{ color: '#888', fontSize: 12 }}>{a.modello}</div>
+                                                <div className="mono" style={{ color: '#666', fontSize: 11 }}>{a.upc}</div>
+                                            </div>
+                                            <div style={{ padding: '6px 10px', borderRadius: 6, background: 'rgba(0,230,118,0.15)', color: 'var(--accent-green)', fontWeight: 700 }}>
+                                                -{a.sconto}%
+                                            </div>
+                                        </div>
+                                    ))}
+                                    {storeArticles.length > 20 && <div style={{ textAlign: 'center', color: '#888', fontSize: 12 }}>... altri {storeArticles.length - 20} articoli</div>}
+                                </div>
+                            </div>
+                        )}
+                    </div>
+
+                    {step === 4 && (
+                        <div style={{ padding: 16, borderTop: '1px solid #222', background: 'var(--bg-secondary)' }}>
+                            <button data-testid="confirm-store" className="btn btn-primary w-full" onClick={confirmStore}>✅ Conferma e salva</button>
+                            <button className="btn btn-secondary w-full" style={{ marginTop: 8 }} onClick={() => setStep(3)}>← Cambia negozio</button>
+                        </div>
+                    )}
+                </div>
+            );
+        }
+
+        // ============================================================
         // APP
         // ============================================================
         function App() {
@@ -693,6 +961,7 @@
                     {view === 'home' && <HomeView />}
                     {view === 'scanner' && <ScannerView />}
                     {view === 'history' && <HistoryView />}
+                    {view === 'loader' && <CorporateLoader />}
                 </>
             );
         }
